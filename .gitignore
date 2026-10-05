@@ -12,3 +12,8 @@ tests/bukti-old/
 # Halaman pemantau sementara yang dibuat scripts/uji-offline.py (dihapus lagi di akhir uji;
 # dicatat di sini hanya sebagai jaring pengaman kalau uji berhenti di tengah jalan)
 app/_uji-setup-sw.html
+
+# Hasil sementara riset audio pengucapan (angka & berkas contoh). Dibuat ulang kapan saja dengan:
+# python scripts/riset-audio-tutup.py dan scripts/riset-audio-contoh.py
+riset-audio-*.json
+riset-audio-contoh/

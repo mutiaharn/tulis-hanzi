@@ -5,6 +5,7 @@ dan bisa langsung dipakai. Materi HSK 1 (150 kata), koreksi goresan langsung, ja
 
 > **Dokumen:** [`docs/BRD.md`](docs/BRD.md) (kebutuhan & keputusan) ·
 > [`docs/RANCANGAN-SISTEM.md`](docs/RANCANGAN-SISTEM.md) (cara kerjanya) ·
+> [`docs/RISET-AUDIO.md`](docs/RISET-AUDIO.md) (rencana bunyi pengucapan) ·
 > [`docs/CARA-PUSH-GITHUB.md`](docs/CARA-PUSH-GITHUB.md) (cara push & hosting) ·
 > [`docs/hasil-uji.txt`](docs/hasil-uji.txt) (bukti pengujian)
 
@@ -128,6 +129,37 @@ Yang **belum** diverifikasi (jujur, agar tidak dianggap sudah beres):
   Actions sukses (job "terbit" selesai dalam 21 detik, commit `05681bb`), lalu halaman publiknya
   dibuka memakai Chrome headless dan **150 tombol kata benar-benar dirender** — bukan sekadar
   "laman membalas HTTP 200". Tautan: https://mutiaharn.github.io/tulis-hanzi/
+
+---
+
+## Bagaimana cara kerjanya (ringkas)
+
+Rinciannya di [`docs/RANCANGAN-SISTEM.md`](docs/RANCANGAN-SISTEM.md); ini versi pendeknya:
+
+- **Penilaian goresan** memakai pustaka Hanzi Writer, tetapi gambarnya dimatikan total — yang
+  menilai tetap pustaka, yang menggambar aplikasi sendiri.
+- **Yang terlihat di kanvas adalah bentuk asli goresan aksara** (bukan jalur jari). Aplikasi
+  mengambil bentuk tertutup tiap goresan dari `app/data/strokes.json`, lalu membukanya sedikit demi
+  sedikit mengikuti posisi jari lewat sebuah "koridor" selebar goresan itu.
+- **Contoh arah goresan digambar di dalam kanvas latihan**, bukan di kotak terpisah, dengan animasi
+  yang dijalankan sendiri oleh aplikasi — caranya begini supaya penilaian goresan tidak ikut batal.
+- **Jalan tanpa internet** karena seluruh berkas (termasuk pustaka Hanzi Writer dan data goresan)
+  disimpan di perangkat oleh `app/sw.js`; versi simpannya dihitung dari isi berkas saat build.
+- **Versi satu berkas** (`dist/`) dibuat oleh `scripts/build.py` dengan memasukkan seluruh berkas
+  ke dalam satu HTML, supaya aplikasi bisa dibuka tanpa server sama sekali.
+
+---
+
+## Rencana berikutnya: bunyi pengucapan
+
+Sudah **diriset dan diukur**, belum dikerjakan: [`docs/RISET-AUDIO.md`](docs/RISET-AUDIO.md).
+Ringkasnya — dari 150 kata HSK 1, **135 sudah punya rekaman pengucapan manusia** (133 berkas
+berbeda) di Wikimedia Commons, hampir semuanya dari **satu penutur** (Wei Gao), lisensi
+**CC BY 2.0 fr** sehingga
+namanya **wajib dicantumkan**. Rekaman **per aksara hampir tidak tersedia** (9 dari 178), jadi
+bunyi per aksara akan disusun dari rekaman suku kata. Berkasnya berformat Ogg dan **tidak bisa
+diputar di iPhone**, jadi harus dikonversi dulu (ffmpeg). Rencananya: bunyi muncul saat satu
+aksara selesai ditulis dengan benar dan saat aksara diketuk.
 
 ---
 
