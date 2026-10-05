@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Tulis Hanzi — latihan menulis aksara Mandarin</title>
+<meta name="description" content="Latihan menulis aksara Mandarin HSK 1 dengan koreksi goresan, offline.">
+<meta name="theme-color" content="#b91c1c">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="wrap">
+    <h1>Tulis Hanzi</h1>
+    <p class="sub">Latihan menulis aksara Mandarin · HSK 1 · <span id="meta-kata">150</span> kata · bisa dipakai offline</p>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <section id="screen-list">
+    <p class="lead">Pilih kata, lalu jiplak aksaranya di kotak bergaris. Goresan yang salah tidak akan diterima — jadi tanganmu belajar urutan yang benar sejak awal.</p>
+    <div id="lesson-list"></div>
+  </section>
+
+  <section id="screen-practice" hidden>
+    <button id="btn-back" class="btn ghost back">← Daftar kata</button>
+
+    <div class="card">
+      <p class="crumb" id="p-crumb"></p>
+
+      <div class="word-info">
+        <div class="pinyin" id="p-pinyin"></div>
+        <div class="arti" id="p-arti"></div>
+      </div>
+
+      <div class="steps" id="p-steps"></div>
+
+      <div class="stage">
+        <div class="cell" id="cell">
+          <div class="grid" aria-hidden="true"></div>
+          <div class="hw" id="hw"></div>
+        </div>
+      </div>
+
+      <div class="dots" id="p-dots" aria-hidden="true"></div>
+      <p class="hintline" id="p-hint"></p>
+
+      <div class="actions">
+        <button id="btn-demo" class="btn">Lihat contoh</button>
+        <button id="btn-clear" class="btn">Hapus</button>
+      </div>
+
+      <div class="actions nav" id="p-next-char" hidden>
+        <button id="btn-next-char" class="btn">Aksara berikutnya →</button>
+      </div>
+
+      <div class="actions nav">
+        <button id="btn-prev" class="btn ghost">← Sebelumnya</button>
+        <button id="btn-next" class="btn ghost">Berikutnya →</button>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="wrap foot">
+  Data goresan aksara: <b>Hanzi Writer</b> (lisensi MIT) · daftar kata: HSK 1 (150 kata) · pinyin &amp; arti Indonesia disusun khusus untuk aplikasi ini.
+  <p class="ttd">Mutiah Arinil Fayza Nusar · 2026</p>
+</footer>
+
+<script src="vendor/hanzi-writer.min.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

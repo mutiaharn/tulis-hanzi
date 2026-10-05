@@ -1,0 +1,109 @@
+/* Tulis Hanzi — tampilan. Semua warna/font lokal, tanpa aset dari internet. */
+:root{
+  --paper:#fdfbf7;
+  --card:#ffffff;
+  --ink:#1f2937;
+  --ink-soft:#6b7280;
+  --line:#e8e1d6;
+  --accent:#b91c1c;
+  --accent-soft:#fdf2f2;
+  --ok:#15803d;
+  --grid:#e3d9c8;
+  --radius:14px;
+}
+*{box-sizing:border-box}
+[hidden]{display:none !important}   /* wajib: agar elemen ber-display flex tetap bisa disembunyikan */
+html{margin:0;padding:0;scrollbar-gutter:stable}  /* gutter tetap: lebar layout tidak berubah saat kanvas muncul */
+body{
+  margin:0;padding:0;
+  background:var(--paper);
+  color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  line-height:1.5;
+  -webkit-text-size-adjust:100%;
+}
+.hz,.hw,.steps .ch,.cell{font-family:"Noto Sans SC","Noto Sans CJK SC","Source Han Sans SC","PingFang SC","Microsoft YaHei","Heiti SC",sans-serif}
+
+.wrap{max-width:620px;margin:0 auto;padding:0 16px}
+
+.topbar{background:var(--accent);color:#fff;padding:14px 0 16px;box-shadow:0 1px 0 rgba(0,0,0,.12)}
+.topbar h1{margin:0;font-size:20px;letter-spacing:.3px;font-weight:600}
+.topbar .sub{margin:2px 0 0;font-size:12px;opacity:.9}
+
+main{padding:16px 0 8px;min-height:60vh}
+.lead{font-size:14px;color:var(--ink-soft);margin:0 0 18px}
+.foot{font-size:11.5px;color:var(--ink-soft);padding:18px 16px 28px;border-top:1px solid var(--line);margin-top:24px}
+.foot .ttd{margin:8px 0 0;font-size:11.5px;color:var(--accent);letter-spacing:.4px}
+
+/* ---------- daftar pelajaran ---------- */
+.lesson{margin:0 0 22px}
+.lesson h2{
+  font-size:13px;text-transform:uppercase;letter-spacing:.8px;color:var(--ink-soft);
+  margin:0 0 8px;font-weight:600;display:flex;align-items:center;gap:8px
+}
+.lesson h2 .no{
+  background:var(--accent-soft);color:var(--accent);border-radius:6px;
+  padding:1px 6px;font-size:11px;letter-spacing:0
+}
+.lesson h2 .count{margin-left:auto;font-weight:400;letter-spacing:0;text-transform:none}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{
+  background:var(--card);border:1px solid var(--line);border-radius:12px;
+  padding:8px 10px 6px;min-width:64px;cursor:pointer;text-align:center;
+  font:inherit;color:inherit;transition:transform .08s ease,border-color .15s ease,box-shadow .15s ease
+}
+.chip:active{transform:scale(.96)}
+.chip:hover{border-color:var(--accent);box-shadow:0 2px 8px rgba(185,28,28,.10)}
+.chip .hzc{display:block;font-size:23px;line-height:1.2}
+.chip .py{display:block;font-size:11px;color:var(--ink-soft);margin-top:2px}
+
+/* ---------- latihan ---------- */
+.btn{
+  font:inherit;font-size:14px;padding:10px 14px;border-radius:10px;cursor:pointer;
+  border:1px solid var(--line);background:var(--card);color:var(--ink);flex:1 1 0;
+  transition:transform .08s ease,background .15s ease
+}
+.btn:active{transform:scale(.97)}
+.btn.ghost{background:transparent}
+.btn.ghost:hover{background:#fff}
+.btn.back{flex:0 0 auto;margin-bottom:12px;padding:8px 12px;font-size:13px}
+.btn:disabled{opacity:.45;cursor:default}
+
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px;box-shadow:0 1px 3px rgba(31,41,55,.04)}
+.crumb{margin:0 0 10px;font-size:11.5px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.6px}
+.word-info{text-align:center}
+.pinyin{font-size:22px;color:var(--accent);font-weight:600;letter-spacing:.5px}
+.arti{font-size:14px;color:var(--ink-soft);margin-top:2px}
+
+.steps{display:flex;justify-content:center;gap:10px;margin:14px 0 6px}
+.steps .ch{
+  font-size:20px;padding:4px 9px;border-radius:8px;border:1px solid var(--line);
+  color:#c9bfae;background:#faf8f4;transition:all .2s ease
+}
+.steps .ch.done{color:#fff;background:var(--ok);border-color:var(--ok)}
+.steps .ch.active{color:var(--ink);border-color:var(--accent);background:var(--accent-soft);box-shadow:0 0 0 3px rgba(185,28,28,.10)}
+
+.stage{display:flex;justify-content:center;margin:10px 0 4px}
+
+/* lapisan gambar milik aplikasi (isian tinta + contoh arah) di atas kanvas pustaka.
+   pointer-events:none WAJIB: kalau tidak, pustaka tidak menerima sentuhan pengguna. */
+.lapisan-tinta{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none}
+/* ring, bukan border: agar kotak SVG sama persis dengan ukuran internal pustaka (tanpa selisih 2px) */
+.cell{position:relative;flex:0 0 auto;border-radius:10px;background:#fff;overflow:hidden;box-shadow:0 0 0 1px var(--line)}
+.cell.miss{box-shadow:0 0 0 1px var(--accent),0 0 0 4px rgba(185,28,28,.13)}
+.cell.win{box-shadow:0 0 0 1px var(--ok),0 0 0 4px rgba(21,128,61,.13)}
+.grid{position:absolute;inset:0;pointer-events:none}
+.grid:before,.grid:after{content:"";position:absolute}
+.grid:before{left:0;right:0;top:50%;height:1px;background-image:repeating-linear-gradient(to right,var(--grid) 0 5px,transparent 5px 10px)}
+.grid:after{top:0;bottom:0;left:50%;width:1px;background-image:repeating-linear-gradient(to bottom,var(--grid) 0 5px,transparent 5px 10px)}
+.hw{position:absolute;inset:0;display:block}
+.hw svg{display:block;width:100%;height:100%}
+
+.dots{display:flex;justify-content:center;gap:6px;margin:10px 0 0;height:9px}
+.dots i{width:8px;height:8px;border-radius:50%;background:#eae3d8;border:1px solid var(--line);display:block;transition:background .2s ease}
+.dots i.on{background:var(--ok);border-color:var(--ok)}
+
+.hintline{font-size:12.5px;color:var(--ink-soft);text-align:center;margin:10px 0 14px;min-height:18px}
+.hintline.good{color:var(--ok);font-weight:600}
+.actions{display:flex;gap:10px;margin-top:10px}
+.actions.nav{margin-top:14px;padding-top:14px;border-top:1px dashed var(--line)}
