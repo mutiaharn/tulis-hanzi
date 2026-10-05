@@ -17,21 +17,26 @@ Potret layar: [daftar kata](docs/tampilan-daftar.png) ·
 
 ## Cara memakai
 
-### A. Paling cepat (tanpa server, satu berkas)
+### A. Dari internet (sudah tayang)
+Buka **https://mutiaharn.github.io/tulis-hanzi/** di Chrome — bisa dari HP maupun laptop. Setelah
+dibuka sekali, berkasnya tersimpan di perangkat dan aplikasi tetap jalan tanpa internet (lihat
+bagian D untuk memasangnya sebagai ikon di layar utama).
+
+### B. Paling cepat (tanpa server, satu berkas)
 Buka **`dist/tulis-hanzi-satu-file.html`** — klik dua kali di komputer, atau kirim ke HP dan
 buka dengan Chrome. Seluruh aplikasi + data ada di dalam berkas itu (416 KB), jadi jalan tanpa
 internet dan tanpa pemasangan.
 
-### B. Cara yang disarankan di laptop (bisa dipasang & offline)
+### C. Cara yang disarankan di laptop (bisa dipasang & offline)
 ```bat
 python -m http.server 8777 --directory app
 ```
 Lalu buka `http://127.0.0.1:8777` di Chrome.
 
-### C. Memasang di HP (offline, ikon di layar utama)
-Terbitkan isi folder `app/` ke GitHub Pages (langkah lengkapnya di
-[`docs/CARA-PUSH-GITHUB.md`](docs/CARA-PUSH-GITHUB.md)), buka alamatnya di Chrome HP, lalu
-menu ⋮ → **Tambahkan ke layar utama**. Setelah dibuka sekali, aplikasi berjalan tanpa sinyal.
+### D. Memasang di HP (offline, ikon di layar utama)
+Buka **https://mutiaharn.github.io/tulis-hanzi/** di Chrome HP, lalu menu ⋮ → **Tambahkan ke
+layar utama**. Setelah dibuka sekali, aplikasi berjalan tanpa sinyal. Cara menerbitkan sendiri
+untuk perubahan berikutnya: [`docs/CARA-PUSH-GITHUB.md`](docs/CARA-PUSH-GITHUB.md).
 
 ---
 
@@ -46,8 +51,8 @@ menu ⋮ → **Tambahkan ke layar utama**. Setelah dibuka sekali, aplikasi berja
 5. Kata beraksara banyak dikerjakan satu aksara pada satu waktu. Setelah satu aksara selesai,
    aplikasi berhenti dan menampilkan tombol **Aksara berikutnya** — jadi kamu bisa memeriksa
    tulisanmu dulu sebelum lanjut.
-6. Tombol **Lihat contoh** membuka kotak kecil berisi animasi goresan yang sedang dibutuhkan.
-   Ketuk kotaknya untuk memutar ulang animasinya.
+6. Tombol **Lihat contoh** memutar ulang contoh goresan **di dalam kanvas latihan itu sendiri**,
+   tanpa menghapus tulisanmu. Contohnya menyingkir begitu kamu mulai menulis.
 
 Salah dua kali pada goresan yang sama? Aplikasi menunjukkan kilasan goresan yang benar (tidak
 dihitung sebagai nilai).
@@ -119,9 +124,10 @@ Yang **belum** diverifikasi (jujur, agar tidak dianggap sudah beres):
 - iPhone/Safari belum pernah diuji (yang diuji Chrome di laptop dan Chrome headless).
 - HP aslinya belum bisa diuji dari sini; yang diuji adalah tampilan pada ukuran layar HP
   (400 × 940) dan seluruh perilaku kanvas.
-- Penerbitan ke GitHub Pages belum pernah dijalankan sungguhan (belum ada login GitHub di
-  mesin ini). Alur dan berkasnya sudah siap; kegagalan pertama paling mungkin soal
-  penyalaan Pages di langkah 4 panduan, dan itu ada di bagian "kalau ada masalah".
+- Penerbitan ke GitHub Pages **sudah dijalankan dan diverifikasi** (5 Oktober 2026): workflow
+  Actions sukses (job "terbit" selesai dalam 21 detik, commit `05681bb`), lalu halaman publiknya
+  dibuka memakai Chrome headless dan **150 tombol kata benar-benar dirender** — bukan sekadar
+  "laman membalas HTTP 200". Tautan: https://mutiaharn.github.io/tulis-hanzi/
 
 ---
 

@@ -232,4 +232,6 @@ Ringkasan yang paling penting:
 
 **Yang tidak akan ditambahkan:** kuis pilihan ganda, kamus, akun, langganan — semuanya bertentangan dengan alasan aplikasi ini dibuat sesempit mungkin.
 
-**Langkah praktis berikutnya:** menerbitkan aplikasi ke alamat publik (GitHub Pages) supaya bisa dibuka & dipasang di HP dari tautan. Berkas dan panduannya sudah siap (`docs/CARA-PUSH-GITHUB.md`, `.github/workflows/halaman.yml`); yang belum bisa dikerjakan dari sini adalah masuk ke akun GitHub dan menekan tombol penerbitan — itu pekerjaan pemilik produk.
+**Sudah selesai (5 Oktober 2026): penerbitan ke alamat publik.** Aplikasinya tayang di https://mutiaharn.github.io/tulis-hanzi/ , diterbitkan otomatis oleh `.github/workflows/halaman.yml` dari commit `05681bb`. Diverifikasi dengan membuka halaman publiknya memakai Chrome headless: **150 tombol kata benar-benar dirender**, bukan hanya "laman membalas HTTP 200". Panduan menerbitkan sendiri untuk perubahan berikutnya tetap ada di `docs/CARA-PUSH-GITHUB.md`.
+
+**Langkah praktis berikutnya:** pakai dulu di HP sungguhan lalu catat apa yang mengganggu — perilaku di HP/iPhone nyata adalah **satu-satunya bagian yang masih belum terverifikasi**. Setelah itu baru tambahkan HSK 2 (pasang data lewat jalur yang sudah ada).

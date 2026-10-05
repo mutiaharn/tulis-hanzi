@@ -1,5 +1,11 @@
 # Cara push ke GitHub dan menerbitkan aplikasinya (hosting)
 
+> **Catatan (5 Oktober 2026): penerbitan pertama SUDAH dikerjakan.** Aplikasinya tayang di
+> https://mutiaharn.github.io/tulis-hanzi/ — repo `mutiaharn/tulis-hanzi`, Pages sumber
+> "GitHub Actions", commit `05681bb`. Untuk **pembaruan berikutnya** cukup langkah 6
+> (build → commit → push). Langkah 1–4 hanya perlu diulang kalau berganti akun/repositori
+> atau kalau Pages dimatikan.
+
 Panduan ini langkah demi langkah, dari folder di laptop sampai aplikasi bisa dibuka di HP
 lewat alamat internet. Semua perintah ditulis untuk **Command Prompt (cmd.exe)** — kalau kamu
 memakai Git Bash atau PowerShell, perintahnya sama kecuali cara menulis alamat folder
