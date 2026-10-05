@@ -1,0 +1,14 @@
+# Sampah kerja yang tidak perlu masuk repositori
+__pycache__/
+*.pyc
+
+# Salinan "versi lama" untuk membuktikan bug goresan hilang.
+# Dibuat ulang kapan saja dengan: python scripts/buat-bukti-bug.py
+tests/bukti-old/
+
+# Berkas sementara Chrome headless saat menguji
+.chrome-uji/
+
+# Halaman pemantau sementara yang dibuat scripts/uji-offline.py (dihapus lagi di akhir uji;
+# dicatat di sini hanya sebagai jaring pengaman kalau uji berhenti di tengah jalan)
+app/_uji-setup-sw.html

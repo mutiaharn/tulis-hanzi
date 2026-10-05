@@ -1,0 +1,40 @@
+name: Terbitkan aplikasi ke GitHub Pages
+
+# Berjalan otomatis setiap kali ada push ke branch main.
+# Yang diterbitkan hanya isi folder app/ — jadi alamat situsnya rapi:
+# https://<nama-akun>.github.io/<nama-repositori>/
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:            # bisa dijalankan manual dari tab Actions
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: halaman
+  cancel-in-progress: true
+
+jobs:
+  terbit:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.terbitkan.outputs.page_url }}
+    steps:
+      - name: Ambil isi repositori
+        uses: actions/checkout@v4
+
+      - name: Siapkan GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Unggah folder app/ sebagai isi situs
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: app
+
+      - name: Terbitkan
+        id: terbitkan
+        uses: actions/deploy-pages@v4

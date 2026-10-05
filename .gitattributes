@@ -1,0 +1,11 @@
+# Aturan baris berkas, supaya isi repo sama saja di Windows, Linux, maupun macOS.
+# Tanpa ini, Git di Windows bisa mengubah akhir baris setiap berkas dan diff jadi
+# "seluruh berkas berubah" padahal isinya tidak diubah.
+* text=auto eol=lf
+
+# Berkas gambar diperlakukan sebagai data biner (jangan diubah akhir barisnya).
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
