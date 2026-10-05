@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="id"><head><meta charset="utf-8"><title>diagnosa kanvas</title>
+<style>html,body{margin:0;padding:0}#app{border:0;display:block;width:100vw;height:100vh}
+#d{position:fixed;left:0;bottom:0;background:#fff;font:11.5px monospace;white-space:pre-wrap;max-width:100%}</style>
+</head>
+<body>
+<!-- Lingkungan SAMA dengan driver pemotret layar.
+     ?mode=salah   -> tulis goresan SALAH, lalu laporkan apa yang tertinggal di kanvas.
+     ?mode=selesai -> tulis seluruh goresan yang benar.
+     ?app=...      -> berkas aplikasi yang diuji
+                      bawaan: ../../app/index.html (aplikasi sekarang)
+                      versi lama (buat dulu: python scripts/buat-bukti-bug.py):
+                      ../../tests/bukti-old/index.html
+     tanpa mode   -> tulis goresan BENAR (perilaku normal). -->
+<div id="kotak"></div>
+<script>
+const APLIKASI = new URLSearchParams(location.search).get('app') || '../../app/index.html';
+const bingkai = document.createElement('iframe');
+bingkai.id = 'app';
+bingkai.style.cssText = 'border:0;display:block;width:420px;height:600px';
+bingkai.src = APLIKASI;                // dibuat dari JavaScript supaya berkasnya bisa diganti
+document.getElementById('kotak').appendChild(bingkai);
+</script>
+<pre id="d">…</pre>
+<script>
+const ifr = document.getElementById('app');
+const out = document.getElementById('d');
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const mode = new URLSearchParams(location.search).get('mode') || 'benar';
+
+function laporan(doc, win, judul) {
+  const gelap = [...doc.querySelectorAll('#hw svg path')].filter(p => {
+    const s = win.getComputedStyle(p);
+    return parseFloat(s.opacity) > 0.5 && s.fill === 'none';
+  });
+  const baris = gelap.map(p => {
+    const s = win.getComputedStyle(p);
+    return '    opacity=' + Number(s.opacity).toFixed(2) + ' stroke=' + s.stroke +
+           ' lebar=' + s.strokeWidth + ' d=' + (p.getAttribute('d') || '').slice(0, 48);
+  });
+  return judul + ' -> ' + gelap.length + ' gambar terlihat\n' + baris.join('\n');
+}
+
+(async function () {
+  const win = ifr.contentWindow;
+  let t = 0;
+  while (!(win.tulisHanzi && win.tulisHanzi.hsk1) && t++ < 100) await sleep(150);
+  const doc = win.document;
+  const chip = [...doc.querySelectorAll('#lesson-list .chip')].find(c => c.querySelector('.hzc').textContent === '我们');
+  chip.click();
+  await sleep(600);
+
+  const st = win.tulisHanzi;
+  const svg = doc.querySelector('#hw svg');
+  const size = Number(svg.getAttribute('width'));
+  const pad = Math.round(size * 0.04), z = 1024;
+  const s = Math.min((size - 2 * pad) / z, (size - 2 * pad) / z);
+  const pos = { scale: s, xOffset: pad + ((size - 2 * pad) - s * z) / 2, yOffset: pad + ((size - 2 * pad) - s * z) / 2 + 124 * s, height: size };
+  const rect = svg.getBoundingClientRect();
+  const kirim = (m, garis) => {
+    const ev = (type, x, y) => new win.MouseEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y });
+    const titik = garis.map(p => ({ x: rect.left + p[0] * pos.scale + pos.xOffset, y: rect.top + pos.height - pos.yOffset - p[1] * pos.scale }));
+    svg.dispatchEvent(ev('mousedown', titik[0].x, titik[0].y));
+    titik.slice(1).forEach(q => svg.dispatchEvent(ev('mousemove', q.x, q.y)));
+    doc.dispatchEvent(ev('mouseup', titik[titik.length - 1].x, titik[titik.length - 1].y));
+  };
+  const goresanBenar = i => kirim('benar', st.strokes['我'].medians[i]);
+
+  let teks = '';
+  const kotakKanvas = () => {
+    const r = svg.getBoundingClientRect();
+    return '  letak kanvas di potret: x ' + Math.round(r.left) + '..' + Math.round(r.right) +
+           ' , y ' + Math.round(r.top) + '..' + Math.round(r.bottom);
+  };
+  if (mode === 'waktu') {
+    // berapa lama tinta bertahan setelah satu goresan benar?
+    const gelap = () => [...doc.querySelectorAll('#hw svg path')]
+      .filter(p => win.getComputedStyle(p).fill === 'none' &&
+                   win.getComputedStyle(p).stroke === 'rgb(31, 41, 55)' &&
+                   parseFloat(win.getComputedStyle(p).opacity) > 0.5)
+      .map(p => Number(win.getComputedStyle(p).strokeWidth));
+    goresanBenar(0);
+    let deret = [];
+    for (const jeda of [300, 700, 1000, 2000, 4000]) {
+      await sleep(jeda);
+      const g = gelap();
+      deret.push((jeda) + 'ms: ' + g.length + ' gambar' + (g.length ? ' (lebar ' + g.join(',') + 'px)' : ''));
+    }
+    teks = 'satu goresan BENAR — tinta yang terlihat setiap waktu:\n  ' + deret.join('\n  ');
+  } else if (mode === 'selesai') {
+    const n = st.strokes['我'].medians.length;
+    for (let i = 0; i < n; i++) { goresanBenar(i); await sleep(1200); }
+    await sleep(2500);
+    teks = laporan(doc, win, 'setelah ' + n + ' goresan BENAR (aksara selesai), 2,5 detik kemudian');
+    teks += '\ntitik progres menyala = ' + doc.querySelectorAll('#p-dots i.on').length;
+  } else if (mode === 'salah') {
+    // garis diagonal di sudut kanan atas — jelas bukan goresan aksara ini
+    kirim('salah', [[560, 980], [760, 980], [960, 980]]);
+    await sleep(2500);
+    teks += laporan(doc, win, 'setelah goresan SALAH, 2,5 detik kemudian');
+    teks += '\ntitik progres menyala = ' + doc.querySelectorAll('#p-dots i.on').length + ' (0 = ditolak, benar)';
+  } else {
+    goresanBenar(0);
+    await sleep(1500);
+    teks += laporan(doc, win, 'setelah 1 goresan BENAR, 1,5 detik kemudian');
+    teks += '\ntitik progres menyala = ' + doc.querySelectorAll('#p-dots i.on').length + '\n' + kotakKanvas();
+  }
+  out.textContent = teks;
+  document.title = 'SELESAI';
+})();
+</script>
+</body></html>

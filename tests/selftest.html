@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="id"><head><meta charset="utf-8"><title>uji tulis-hanzi</title>
+<style>body{font:12.5px monospace;margin:0;display:flex}#app{border:0;width:400px;height:880px;flex:0 0 auto}
+#out{padding:10px;white-space:pre-wrap;flex:1;min-width:0;overflow:auto}</style></head>
+<body>
+<iframe id="app" src="../app/index.html"></iframe>
+<pre id="out">menunggu aplikasi…</pre>
+<script>
+/* Uji otomatis aplikasi Tulis Hanzi.
+   Menjalankan aplikasi ASLI di dalam iframe lalu menekan kanvas dengan koordinat yang
+   diambil dari data goresan, jadi validasi goresan sungguhan yang diuji.
+   Catatan: clientX/clientY wajib diberikan lewat opsi MouseEvent (propertinya read-only). */
+const res = [];
+const out = document.getElementById('out');
+function rec(ok, name, detail) {
+  res.push({ ok: !!ok, name: name, detail: detail === undefined ? '' : detail });
+  out.textContent = res.map(r => (r.ok ? 'LULUS  ' : 'GAGAL  ') + r.name + (r.detail ? '  [' + r.detail + ']' : '')).join('\n');
+}
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+(async function run() {
+  try {
+    const ifr = document.getElementById('app');
+    const win = ifr.contentWindow;
+    let t = 0;
+    while (!(win.tulisHanzi && win.tulisHanzi.hsk1) && t++ < 120) await sleep(150);
+    const doc = win.document;                 // diambil SETELAH iframe selesai memuat
+    const st = win.tulisHanzi;
+    if (!st || !st.hsk1) { rec(false, 'aplikasi termuat', 'state tidak muncul'); return done(); }
+
+    const errs = [];
+    win.addEventListener('error', e => errs.push(String(e.message)));
+    win.addEventListener('unhandledrejection', e => errs.push('promise: ' + e.reason));
+
+    // ---------- data & daftar ----------
+    rec(st.hsk1.meta.jumlah_kata === 150, 'data HSK 1 berisi 150 kata', 'jumlah=' + st.hsk1.meta.jumlah_kata);
+    rec(Object.keys(st.strokes).length === 178, 'data goresan 178 aksara unik', 'jumlah=' + Object.keys(st.strokes).length);
+    rec(doc.querySelectorAll('#lesson-list .chip').length === 150, '150 tombol kata tampil', 'jumlah=' + doc.querySelectorAll('#lesson-list .chip').length);
+
+    // ---------- alat bantu ----------
+    function rect() { return doc.querySelector('#hw').getBoundingClientRect(); }
+    function posisi() {
+      const svg = doc.querySelector('#hw svg');
+      const size = Number(svg.getAttribute('width')) || st.size;
+      const p = Math.round(size * 0.04), z = 1024;
+      const s = Math.min((size - 2 * p) / z, (size - 2 * p) / z);
+      return { scale: s, xOffset: p + ((size - 2 * p) - s * z) / 2, yOffset: p + ((size - 2 * p) - s * z) / 2 + 124 * s, height: size };
+    }
+    function pt(base, r, po) {                 // grid 1024 (y ke atas) -> pixel layar
+      return { x: r.left + (base[0] * po.scale + po.xOffset), y: r.top + (po.height - po.yOffset - base[1] * po.scale) };
+    }
+    function svgPustaka() { return doc.querySelector('#hw svg:not(.lapisan-tinta)'); }
+    function tembak(jenis, p) {
+      svgPustaka().dispatchEvent(new win.MouseEvent(jenis, { bubbles: true, cancelable: true, clientX: p.x, clientY: p.y }));
+    }
+    function tekan(points) {
+      tembak('mousedown', points[0]);
+      points.slice(1).forEach(p => tembak('mousemove', p));
+      doc.dispatchEvent(new win.MouseEvent('mouseup', { bubbles: true, cancelable: true,
+        clientX: points[points.length - 1].x, clientY: points[points.length - 1].y }));
+    }
+    function tulisGoresan(i) {                 // tulis goresan ke-i aksara aktif dengan data asli
+      const ch = st.chars[st.ci];
+      const d = st.strokes[ch];
+      tekan(d.medians[i].map(p => pt(p, rect(), posisi())));
+    }
+    function medianAktif(i) {
+      const ch = st.chars[st.ci], med = st.strokes[ch].medians[i];
+      const k = [0];
+      for (let j = 1; j < med.length; j++) k.push(k[j - 1] + Math.hypot(med[j][0] - med[j - 1][0], med[j][1] - med[j - 1][1]));
+      const total = k[k.length - 1];
+      return { med: med, total: total, di: (t) => {
+        for (let j = 1; j < med.length; j++) {
+          if (k[j] >= t) {
+            const f = (t - k[j - 1]) / (k[j] - k[j - 1] || 1);
+            return [med[j - 1][0] + f * (med[j][0] - med[j - 1][0]), med[j - 1][1] + f * (med[j][1] - med[j - 1][1])];
+          }
+        }
+        return med[med.length - 1];
+      } };
+    }
+    const dots = () => doc.querySelectorAll('#p-dots i.on').length;
+    const barisLanjutTampil = () => !doc.querySelector('#p-next-char').hidden;
+    // Tinta = isian milik aplikasi sendiri yang masih terlihat (bagian yang sudah dibekukan
+    // maupun yang sedang ditulis). Angka ini tidak ikut berubah-ubah oleh animasi pustaka.
+    const tinta = () => [...doc.querySelectorAll('.lapisan-tinta path.isian')].filter(p =>
+      parseFloat(win.getComputedStyle(p).opacity) > 0.5 && (p.getAttribute('d') || '').length > 0).length;
+    // Coretan mentah: pustaka menggambar jalur jari dengan lebar = drawingWidth (0.085 x kanvas).
+    // Jalur seperti itu HARUS TIDAK ADA lagi sebagai gambar yang terlihat — penggambarnya hanya
+    // lapisan isian. (Jalurnya sendiri masih dibuat pustaka, tetapi warnanya transparan.)
+    const alfa = (w) => {
+      const m = /rgba?\(([^)]+)\)/.exec(w || '');
+      if (!m) return w && w !== 'none' ? 1 : 0;
+      const p = m[1].split(',');
+      return p.length > 3 ? parseFloat(p[3]) : 1;
+    };
+    const mentah = () => [...doc.querySelectorAll('#hw > svg:not(.lapisan-tinta) path')].filter(p => {
+      const s = win.getComputedStyle(p);
+      return parseFloat(s.opacity) > 0.5 && alfa(s.stroke) > 0.05 &&
+             s.strokeWidth === Math.round(st.size * 0.085) + 'px';
+    }).map(p => win.getComputedStyle(p).stroke).join(',');
+    const contohArah = () => doc.querySelector('.lapisan-tinta path.contoh-arah');
+
+    // ---------- buka kata 我们 ----------
+    const chip = [...doc.querySelectorAll('#lesson-list .chip')].find(c => c.querySelector('.hzc').textContent === '我们');
+    if (!chip) { rec(false, 'kata 我们 ada di daftar', 'tidak ditemukan'); return done(); }
+    chip.click();
+    await sleep(900);
+    rec(!doc.querySelector('#screen-practice').hidden, 'layar latihan terbuka', '');
+    rec(doc.querySelector('#p-pinyin').textContent === 'wǒmen' && doc.querySelector('#p-arti').textContent === 'kami; kita',
+        'pinyin + arti Indonesia tampil', doc.querySelector('#p-pinyin').textContent + ' / ' + doc.querySelector('#p-arti').textContent);
+    rec(st.total === 7 && doc.querySelectorAll('#p-dots i').length === 7, 'aksara 我 = 7 goresan, 7 penanda tampil', 'total=' + st.total);
+    rec(Math.abs(rect().width - Number(svgPustaka().getAttribute('width'))) < 1.5, 'ukuran kanvas internal = ukuran tampil',
+        'internal=' + svgPustaka().getAttribute('width') + ' tampil=' + rect().width.toFixed(1));
+
+    // ---------- contoh arah: DI DALAM kanvas latihan ----------
+    rec(doc.querySelector('#p-contoh') === null, 'tidak ada lagi kotak contoh terpisah di luar kanvas', '');
+    rec(!!doc.querySelector('#hw .lapisan-tinta'), 'lapisan gambar aplikasi terpasang di kanvas', '');
+    const kotakKanvas = rect(), kotakContoh = contohArah().getBoundingClientRect(), jalurContoh = contohArah().getAttribute('d') || '';
+    rec(jalurContoh.length > 20, 'contoh arah goresan digambar di dalam kanvas', 'panjang jalur=' + jalurContoh.length);
+    rec(kotakContoh.left >= kotakKanvas.left - 2 && kotakContoh.right <= kotakKanvas.right + 2 &&
+        kotakContoh.top >= kotakKanvas.top - 2 && kotakContoh.bottom <= kotakKanvas.bottom + 2,
+        'sebaran contoh berada di dalam kotak kanvas', 'contoh=' + Math.round(kotakContoh.left) + '..' + Math.round(kotakContoh.right));
+    const of1 = parseFloat(contohArah().getAttribute('stroke-dashoffset'));
+    const wContoh = st.writer, titikContoh = dots();
+    // Animasi diukur lewat perubahan atribut (MutationObserver), bukan lewat dua kali sampel:
+    // di lingkungan uji, waktu berjalan sangat cepat sehingga animasi bisa selesai lebih dulu.
+    let langkahContoh = 0;
+    const nilaiContoh = new Set();
+    const obs = new win.MutationObserver(muts => muts.forEach(m => {
+      if (m.attributeName === 'stroke-dashoffset') {
+        langkahContoh++;
+        nilaiContoh.add(contohArah().getAttribute('stroke-dashoffset'));
+      }
+    }));
+    obs.observe(contohArah(), { attributes: true, attributeFilter: ['stroke-dashoffset'] });
+    doc.querySelector('#btn-demo').click();
+    await sleep(900);
+    obs.disconnect();
+    rec(langkahContoh >= 3 && nilaiContoh.size >= 3,
+        'contoh arah benar-benar berjalan (banyak langkah, bukan gambar diam)',
+        'perubahan=' + langkahContoh + ', nilai berbeda=' + nilaiContoh.size);
+    rec(st.writer === wContoh && dots() === titikContoh, 'contoh di kanvas TIDAK membatalkan penilaian di kanvas itu', 'kanvas sama=' + (st.writer === wContoh));
+
+    // ---------- goresan salah ditolak ----------
+    const data = st.strokes['我'];
+    const semua = data.medians.flat();
+    const sudut = [[70, 70], [950, 70], [70, 950], [950, 950]]
+      .map(c => ({ c: c, j: Math.min(...semua.map(p => Math.hypot(p[0] - c[0], p[1] - c[1]))) }))
+      .sort((a, b) => b.j - a.j)[0];
+    tekan([[sudut.c[0] - 40, sudut.c[1] - 40], [sudut.c[0], sudut.c[1]], [sudut.c[0] + 40, sudut.c[1] + 40]]
+      .map(p => pt(p, rect(), posisi())));
+    await sleep(200);
+    rec(dots() === 0, 'goresan salah DITOLAK', 'terisi=' + dots());
+    rec(doc.querySelector('#cell').classList.contains('miss'), 'aplikasi menandai goresan salah (kedip merah)', '');
+    await sleep(900);
+    rec(tinta() === 0, 'goresan salah tidak meninggalkan tinta di kanvas', 'tinta terlihat=' + tinta());
+    rec(mentah() === '', 'tidak ada coretan mentah (jalur jari) yang digambar', 'jalur terlihat=' + (mentah() || 'tidak ada'));
+
+    // ---------- isian mengikuti kursor, sebagian, tanpa melepas jari ----------
+    const g0 = medianAktif(0);
+    tembak('mousedown', pt(g0.med[0], rect(), posisi()));
+    await sleep(60);
+    tembak('mousemove', pt(g0.di(g0.total * 0.5), rect(), posisi()));
+    await sleep(80);
+    const fraksi = st.goresAktif ? st.goresAktif.panjang / g0.total : -1;
+    rec(fraksi > 0.3 && fraksi < 0.7, 'isian tumbuh mengikuti posisi kursor', 'fraksi=' + fraksi.toFixed(2));
+    const aktif = doc.querySelector('.lapisan-tinta path.isian:not(.selesai)');
+    rec((aktif.getAttribute('d') || '') === data.strokes[0], 'yang terisi adalah BENTUK ASLI goresan aksara, bukan coretan jari',
+        'panjang=' + (aktif.getAttribute('d') || '').length + ' = data ' + data.strokes[0].length);
+    rec((doc.querySelector('#koridor').getAttribute('d') || '').length > 50 && !!aktif.getAttribute('clip-path'),
+        'isian ditampilkan sebagian lewat koridor (belum penuh)', 'koridor=' + (doc.querySelector('#koridor').getAttribute('d') || '').length + ' huruf');
+    const panjang1 = st.goresAktif.panjang;
+    tembak('mousemove', pt(g0.di(g0.total * 0.15), rect(), posisi()));   // jari mundur
+    await sleep(80);
+    rec(st.goresAktif && st.goresAktif.panjang >= panjang1, 'isian tidak mundur saat jari mundur (tidak berkedip)',
+        panjang1.toFixed(0) + ' -> ' + (st.goresAktif ? st.goresAktif.panjang.toFixed(0) : '?'));
+    rec((contohArah().getAttribute('d') || '') === '', 'contoh menyingkir begitu pengguna mulai menulis', '');
+    const ujung = pt(g0.di(g0.total), rect(), posisi());
+    tembak('mousemove', ujung);
+    doc.dispatchEvent(new win.MouseEvent('mouseup', { bubbles: true, cancelable: true, clientX: ujung.x, clientY: ujung.y }));
+    await sleep(500);
+    rec(dots() === 1, 'goresan yang dijiplak sampai ujung diterima', 'terisi=' + dots());
+    doc.querySelector('#btn-clear').click();
+    await sleep(400);
+
+    // ---------- 7 goresan benar diterima berurutan dan tinta tetap terlihat ----------
+    let maju = 0, tintaTumbuh = 0;
+    for (let i = 0; i < data.medians.length; i++) {
+      const tintaSebelum = tinta();
+      tulisGoresan(i);
+      await sleep(1100);                   // beri waktu untuk animasi pengisian aksara
+      if (dots() === i + 1) maju++;
+      if (tinta() > tintaSebelum) tintaTumbuh++;
+    }
+    rec(maju === 7, 'setiap goresan benar diterima berurutan', maju + '/7 goresan');
+    rec(tintaTumbuh >= 5, 'setiap goresan benar menambah tinta yang terlihat', tintaTumbuh + '/7 langkah');
+    rec(tinta() >= 1, 'tinta terlihat di kanvas setelah goresan benar ditulis', 'tinta=' + tinta());
+
+    // ---------- BUG YANG DIPERBAIKI: tinta tidak boleh hilang sendiri ----------
+    const w0 = st.writer;
+    const pathSebelum = doc.querySelectorAll('#hw path').length;
+    await sleep(2200);                     // dulu: auto-pindah aksara di sini
+    rec(st.ci === 0, 'TIDAK pindah aksara otomatis setelah aksara selesai', 'ci=' + st.ci);
+    rec(dots() === 7, 'penanda goresan tetap penuh', 'terisi=' + dots());
+    rec(tinta() >= 1, 'setelah menunggu 2,2 detik, tinta MASIH TERLIHAT (bug lama: habis sendiri)', 'tinta terlihat=' + tinta());
+    rec(st.writer === w0, 'kanvas tidak dipasang ulang sendiri', '');
+    rec(barisLanjutTampil(), 'tombol "Aksara berikutnya" muncul setelah aksara selesai', doc.querySelector('#btn-next-char').textContent);
+    rec(doc.querySelector('#p-hint').textContent.indexOf('Selesai') === 0 || doc.querySelector('#p-hint').textContent.indexOf('selesai') > 0,
+        'petunjuk menyatakan aksara selesai', doc.querySelector('#p-hint').textContent.slice(0, 60));
+
+    // ---------- tombol "Lihat contoh" memutar contoh PENUH di kanvas tanpa menghapus tinta ----------
+    const tintaSebelumContoh = tinta();
+    doc.querySelector('#btn-demo').click();
+    await sleep(900);
+    const jalurPenuh = (contohArah().getAttribute('d') || '').length;
+    rec(jalurPenuh > 20, 'tombol "Lihat contoh" memutar contoh di kanvas latihan', 'panjang jalur=' + jalurPenuh);
+    rec(st.writer === w0 && dots() === 7, 'memutar contoh tidak mengganggu penilaian', 'terisi=' + dots());
+    await sleep(2400);
+    rec(tinta() === tintaSebelumContoh, 'tinta pengguna tidak terhapus oleh contoh', 'tinta=' + tinta() + ' (sebelum=' + tintaSebelumContoh + ')');
+
+    // resize tanpa perubahan LEBAR (persis kejadian di HP saat address bar menutup)
+    win.dispatchEvent(new win.Event('resize'));
+    await sleep(900);
+    rec(st.writer === w0, 'resize (lebar tetap) TIDAK menghapus goresan', 'kanvas sama=' + (st.writer === w0));
+    rec(dots() === 7, 'setelah resize, ketujuh goresan masih tercatat', 'terisi=' + dots());
+    rec(tinta() >= 1, 'setelah resize (lebar tetap), tinta masih TERLIHAT', 'tinta terlihat=' + tinta());
+    rec(doc.querySelectorAll('#hw path').length >= pathSebelum, 'gambar tinta masih ada di kanvas',
+        'path=' + doc.querySelectorAll('#hw path').length + ' (sebelum=' + pathSebelum + ')');
+
+    // ---------- tombol lanjut aksara ----------
+    doc.querySelector('#btn-next-char').click();
+    await sleep(900);
+    rec(st.ci === 1, 'tombol "Aksara berikutnya" pindah ke aksara kedua', 'ci=' + st.ci);
+    rec(dots() === 0 && doc.querySelector('#p-dots').querySelectorAll('i').length === st.strokes['们'].strokes.length,
+        'kanvas baru bersih untuk aksara 们', 'terisi=' + dots());
+    rec(!barisLanjutTampil(), 'tombol lanjut disembunyikan lagi di aksara baru', '');
+    rec(doc.querySelector('#p-steps .ch.active').textContent === '们', 'penunjuk aksara aktif = 们', '');
+
+    // ---------- hapus hanya lewat tombol Hapus ----------
+    tulisGoresan(0);
+    await sleep(700);
+    rec(dots() === 1 && tinta() === 1, 'satu goresan 们 diterima dan terlihat', 'tinta=' + tinta());
+    doc.querySelector('#btn-clear').click();
+    await sleep(400);
+    rec(dots() === 0, 'tombol Hapus mengosongkan kanvas', 'terisi=' + dots());
+    rec(tinta() === 0, 'tombol Hapus benar-benar menghapus tinta (satu-satunya cara tinta hilang)', 'tinta terlihat=' + tinta());
+
+    // ---------- perubahan ukuran layar sungguhan (HP diputar) ----------
+    // Catatan: Chrome (headless) TIDAK mengirim event resize ke iframe yang lebar CSS-nya
+    // diubah induknya, jadi event-nya dikirim manual di sini — persis seperti yang dilakukan
+    // browser pada layar sungguhan saat HP diputar.
+    const sebelum = st.size;
+    const w2 = st.writer;
+    ifr.style.width = '320px';
+    await sleep(400);
+    win.dispatchEvent(new win.Event('resize'));
+    await sleep(1200);
+    rec(st.size !== sebelum && st.size < sebelum, 'lebar berubah banyak -> kanvas diperbarui (HP diputar)', sebelum + ' -> ' + st.size);
+    rec(st.writer !== w2, 'kanvas benar-benar dipasang ulang saat ukuran berubah', '');
+    rec(Math.abs(rect().width - Number(svgPustaka().getAttribute('width'))) < 1.5,
+        'setelah dipasang ulang, ukuran internal tetap = ukuran tampil',
+        'internal=' + svgPustaka().getAttribute('width') + ' tampil=' + rect().width.toFixed(1));
+    rec(!!doc.querySelector('#hw .lapisan-tinta') && (contohArah().getAttribute('d') || '').length > 20,
+        'setelah dipasang ulang, lapisan isian + contoh ikut terpasang lagi', '');
+    ifr.style.width = '400px';
+    await sleep(400);
+    win.dispatchEvent(new win.Event('resize'));
+    await sleep(1200);
+
+    // ---------- selesaikan kata ----------
+    chip.click(); await sleep(900);                       // buka lagi 我们 dari awal
+    for (let i = 0; i < st.strokes['我'].medians.length; i++) { tulisGoresan(i); await sleep(200); }
+    doc.querySelector('#btn-next-char').click(); await sleep(700);
+    for (let i = 0; i < st.strokes['们'].medians.length; i++) { tulisGoresan(i); await sleep(200); }
+    await sleep(900);
+    rec(doc.querySelector('#p-hint').textContent.indexOf('Selesai') === 0, 'kata selesai -> pesan "Selesai"', doc.querySelector('#p-hint').textContent.slice(0, 55));
+    rec(!barisLanjutTampil(), 'di aksara terakhir, tombol lanjut disembunyikan', '');
+
+    // ---------- tombol lain ----------
+    const before = st.idx;
+    doc.querySelector('#btn-next').click(); await sleep(300);
+    rec(st.idx === before + 1, 'tombol "Berikutnya" pindah satu kata', before + ' -> ' + st.idx);
+    doc.querySelector('#btn-prev').click(); await sleep(300);
+    rec(st.idx === before, 'tombol "Sebelumnya" kembali', 'idx=' + st.idx);
+    doc.querySelector('#btn-back').click(); await sleep(250);
+    rec(doc.querySelector('#screen-list').hidden === false && doc.querySelector('#screen-practice').hidden === true, 'kembali ke daftar', '');
+
+    rec(errs.length === 0, 'tidak ada error JavaScript', errs.slice(0, 3).join(' | '));
+  } catch (e) {
+    rec(false, 'uji berjalan tanpa pengecualian', e && e.message ? e.message : String(e));
+  }
+  done();
+})();
+
+function done() {
+  const gagal = res.filter(r => !r.ok).length;
+  out.textContent += '\n\nRINGKASAN: ' + (res.length - gagal) + '/' + res.length + ' lulus';
+  document.title = gagal ? 'SELESAI-' + gagal + '-GAGAL' : 'SELESAI-OK';
+}
+</script>
+</body></html>

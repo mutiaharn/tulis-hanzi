@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="id"><head><meta charset="utf-8"><title>diagnosa perubahan ukuran</title>
+<style>body{font:12.5px monospace;margin:0;display:flex}#app{border:0;width:400px;height:880px;flex:0 0 auto}
+#out{padding:8px;white-space:pre-wrap;flex:1;min-width:0;overflow:auto}</style></head>
+<body>
+<iframe id="app" src="../../app/index.html"></iframe>
+<pre id="out">mengukur…</pre>
+<script>
+const out = document.getElementById('out');
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+(async function () {
+  try {
+    const ifr = document.getElementById('app');
+    const win = ifr.contentWindow;
+    let t = 0;
+    while (!(win.tulisHanzi && win.tulisHanzi.hsk1) && t++ < 120) await sleep(150);
+    const doc = win.document, st = win.tulisHanzi;
+
+    // hitung sendiri berapa kali event resize sampai ke dokumen aplikasi
+    win.__resize = 0;
+    win.addEventListener('resize', () => { win.__resize++; });
+
+    const chip = [...doc.querySelectorAll('#lesson-list .chip')].find(c => c.querySelector('.hzc').textContent === '我们');
+    chip.click();
+    await sleep(500);
+
+    function ukur(nama) {
+      const kartu = doc.querySelector('.card');
+      return nama + ': size=' + st.size +
+        ' lebarKartu=' + (kartu ? kartu.clientWidth : -1) +
+        ' htmlClient=' + doc.documentElement.clientWidth +
+        ' lebarIframe=' + Math.round(ifr.getBoundingClientRect().width) +
+        ' eventResize=' + win.__resize;
+    }
+    out.textContent = ukur('sebelum') + '\n';
+
+    ifr.style.width = '320px';
+    await sleep(1200);
+    out.textContent += ukur('sesudah 320px') + '\n';
+
+    // paksa lewat event manual sebagai pembanding
+    win.dispatchEvent(new win.Event('resize'));
+    await sleep(900);
+    out.textContent += ukur('setelah dispatch manual') + '\n';
+
+    out.textContent += '\nKesimpulan: event resize dari browser ' +
+      (win.__resize > 1 ? 'SAMPAI ke dokumen aplikasi' : 'TIDAK sampai (yang terhitung hanya dispatch manual)');
+    document.title = 'SELESAI';
+  } catch (e) {
+    out.textContent += '\nERROR: ' + (e && e.message ? e.message : e);
+    document.title = 'GAGAL';
+  }
+})();
+</script>
+</body></html>

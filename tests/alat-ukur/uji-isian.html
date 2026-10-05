@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<title>Alat ukur: isian mengikuti arah aksara</title>
+<style>
+  body{margin:0;font:12px/1.5 ui-monospace,Consolas,monospace;background:#111;color:#eee}
+  .bar{position:sticky;top:0;background:#1b1b1b;padding:6px 10px;border-bottom:1px solid #333}
+  iframe{border:1px solid #444;background:#fff}
+  pre{padding:10px;white-space:pre-wrap}
+</style>
+</head>
+<body>
+<div class="bar">Alat ukur isian — jendela uji: <b id="status">memuat…</b></div>
+<iframe id="app" src="../../app/index.html" width="400" height="900" style="flex:0 0 auto"></iframe>
+<pre id="out"></pre>
+<script>
+/* Alat ukur ini menjawab pertanyaan teknis:
+   1. Apakah lapisan isian aplikasi jatuh TEPAT di atas gambar pustaka? (transformasi grid->piksel)
+   2. Apakah isian tumbuh mengikuti posisi kursor? (fraksi panjang garis tengah)
+   3. Apakah isian tidak pernah mundur? (tanpa kedip)
+   4. Apakah koridor selebar 2x140 satuan cukup lebar sehingga bentuk aksara TIDAK terpotong?
+   5. Apakah contoh arah berjalan di dalam kanvas tanpa membatalkan penilaian? */
+const out = document.getElementById('out');
+const baris = [];
+function catat(s) { baris.push(s); out.textContent = baris.join('\n'); }
+const tunggu = (ms) => new Promise(r => setTimeout(r, ms));
+
+async function main() {
+  const fr = document.getElementById('app');
+  await new Promise(r => fr.addEventListener('load', r));
+  const w = fr.contentWindow, d = fr.contentDocument;
+  for (let i = 0; i < 60 && !(w.tulisHanzi && w.tulisHanzi.hsk1); i++) await tunggu(200);
+  const st = w.tulisHanzi;
+  catat('aplikasi terbuka, kata: ' + st.hsk1.meta.jumlah_kata);
+
+  // buka kata 我们 (aksara 我 = 7 goresan)
+  const chip = [...d.querySelectorAll('#lesson-list .chip')].find(c => c.title.indexOf('我们') === 0);
+  chip.click();
+  await tunggu(700);
+  const sel = d.querySelector('#hw svg');
+  catat('kanvas terpasang, aksara: ' + d.querySelector('#p-pinyin').textContent);
+
+  const L = st.lapisan;
+  catat('lapisan aplikasi ada: ' + !!L + ' | transformasi: translate(' + L.ubah.tx + ',' + L.ubah.ty + ') scale(' + L.ubah.sx + ',' + L.ubah.sy + ')');
+
+  // ---- 1. contoh arah berjalan di dalam kanvas ----
+  const penulisAwal = st.writer;
+  const petunjukAwal = d.querySelectorAll('#p-dots i.on').length;
+  d.querySelector('#btn-demo').click();
+  await tunggu(150);
+  const dAwal = parseFloat(L.contoh.getAttribute('stroke-dashoffset'));
+  const dPertama = L.contoh.getAttribute('d');
+  await tunggu(400);
+  const dAkhir = parseFloat(L.contoh.getAttribute('stroke-dashoffset'));
+  catat('1. contoh: jalur ada di dalam kanvas=' + (dPertama && dPertama.length > 20) +
+        ' | dashoffset ' + dAwal.toFixed(1) + ' -> ' + dAkhir.toFixed(1) +
+        ' (bergerak=' + (dAkhir < dAwal) + ')');
+  catat('   penilaian tidak dibatalkan: penulis sama=' + (st.writer === penulisAwal) +
+        ' | titik tidak berubah=' + (d.querySelectorAll('#p-dots i.on').length === petunjukAwal));
+  d.querySelector('#cell'); await tunggu(1500);   // biarkan contoh selesai
+
+  // ---- 2. isian mengikuti posisi kursor ----
+  const peta = (g) => [L.svg.getBoundingClientRect().left + L.ubah.tx + L.ubah.sx * g[0],
+                       L.svg.getBoundingClientRect().top + L.ubah.ty + L.ubah.sy * g[1]];
+  const med = st.strokes['我'].medians[0];
+  const k = [0];
+  for (let i = 1; i < med.length; i++) k.push(k[i-1] + Math.hypot(med[i][0]-med[i-1][0], med[i][1]-med[i-1][1]));
+  const totalGaris = k[k.length-1];
+  const titikDi = (t) => {   // titik pada garis tengah sejauh t
+    for (let i = 1; i < med.length; i++) {
+      if (k[i] >= t) {
+        const f = (t - k[i-1]) / (k[i] - k[i-1] || 1);
+        return [med[i-1][0] + f*(med[i][0]-med[i-1][0]), med[i-1][1] + f*(med[i][1]-med[i-1][1])];
+      }
+    }
+    return med[med.length-1];
+  };
+  const tembak = (jenis, p) => {
+    const [x, y] = peta(p);
+    sel.dispatchEvent(new MouseEvent(jenis, { clientX: x, clientY: y, bubbles: true }));
+  };
+
+  tembak('mousedown', med[0]);
+  await tunggu(60);
+  const potong = [];
+  for (const f of [0.25, 0.5, 0.75]) tembak('mousemove', titikDi(totalGaris * f));
+  await tunggu(60);
+  const p50 = st.goresAktif ? st.goresAktif.panjang : -1;
+  tembak('mousemove', titikDi(totalGaris * 0.5));   // mundur
+  await tunggu(60);
+  const pmundur = st.goresAktif ? st.goresAktif.panjang : -1;
+  potong.push('fraksi setelah maju 75% = ' + (p50 / totalGaris).toFixed(2));
+  potong.push('setelah mundur ke 50% tetap = ' + (pmundur / totalGaris).toFixed(2) + ' (tanpa mundur=' + (pmundur >= p50) + ')');
+  catat('2. isian mengikuti kursor: ' + potong.join(' | '));
+  catat('   koridor terisi: panjang d=' + (L.koridor.getAttribute('d') || '').length + ' | isian d=' + (L.isian.getAttribute('d') || '').length);
+
+  // ---- 4. uji potong bentuk: maju sampai 100% TANPA melepas, lalu bandingkan dengan setelah diterima ----
+  for (const f of [0.9, 0.97, 1]) tembak('mousemove', titikDi(totalGaris * f));
+  await tunggu(80);
+  const jalurPenuh = (L.koridor.getAttribute('d') || '').length;
+  const lebarMaks = [];                              // seberapa lebar koridor efektif pada 100%
+  const kotak = L.koridor.getAttribute('d').match(/-?\d+\.?\d*/g).map(Number);
+  for (let i = 0; i < kotak.length; i += 2) lebarMaks.push(kotak[i]);
+  catat('4. koridor pada 100%: panjang jalur=' + jalurPenuh + ' | jangkauan x=' +
+        Math.min(...lebarMaks).toFixed(0) + '..' + Math.max(...lebarMaks).toFixed(0));
+  window.__kunciKoridorPenuh = jalurPenuh;
+
+  tembak('mouseup', titikDi(totalGaris));
+  await tunggu(400);
+  const isianBeku = d.querySelectorAll('.lapisan-tinta path.isian.selesai').length;
+  catat('   goresan diterima: titik berisi=' + d.querySelectorAll('#p-dots i.on').length +
+        ' | isian beku=' + isianBeku +
+        ' | masih berklip=' + !!d.querySelector('.lapisan-tinta path.isian:not(.selesai)').getAttribute('clip-path'));
+
+  // ---- 5. goresan salah tidak meninggalkan apa pun ----
+  const sebelum = d.querySelectorAll('.lapisan-tinta path.isian').length;
+  tembak('mousedown', [80, 80]);
+  tembak('mousemove', [300, 700]);
+  tembak('mouseup', [300, 700]);
+  await tunggu(500);
+  const isianKosong = (d.querySelector('.lapisan-tinta path.isian:not(.selesai)').getAttribute('d') || '') === '';
+  catat('5. goresan salah: titik tetap=' + d.querySelectorAll('#p-dots i.on').length +
+        ' | isian aktif dikosongkan=' + isianKosong +
+        ' | jumlah isian=' + sebelum + ' -> ' + d.querySelectorAll('.lapisan-tinta path.isian').length);
+
+  document.getElementById('status').textContent = 'selesai';
+  document.title = 'selesai';
+}
+main().catch(e => { catat('GAGAL: ' + e.message + '\n' + e.stack); document.getElementById('status').textContent = 'gagal'; });
+</script>
+</body>
+</html>

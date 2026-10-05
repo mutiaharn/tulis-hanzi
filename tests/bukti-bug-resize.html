@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="id"><head><meta charset="utf-8"><title>bukti bug goresan hilang</title>
+<style>body{font:12.5px monospace;margin:0;display:flex}#lama,#baru{border:0;width:380px;height:860px;flex:0 0 auto}
+#out{padding:8px;white-space:pre-wrap;flex:1;min-width:0;overflow:auto}</style></head>
+<body>
+<!-- Membandingkan dua versi berdampingan dengan perlakuan yang sama:
+       #lama = salinan aplikasi dengan penangan resize LAMA (penghapus otomatis)
+       #baru = aplikasi sekarang
+     Tiga situasi diuji, masing-masing didahului dengan menulis 1 goresan yang benar. -->
+<iframe id="lama" src="bukti-old/index.html"></iframe>
+<iframe id="baru" src="../app/index.html"></iframe>
+<pre id="out">menguji…</pre>
+<script>
+const out = document.getElementById('out');
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const baris = [];
+const catat = s => { baris.push(s); out.textContent = baris.join('\n'); };
+
+/* buka kata, tulis goresan pertama yang BENAR, kembalikan keadaan awal */
+async function goresanBenar(id, kata) {
+  const ifr = document.getElementById(id);
+  const win = ifr.contentWindow;
+  let menunggu = 0;
+  while (!(win.tulisHanzi && win.tulisHanzi.hsk1) && menunggu++ < 120) await sleep(150);
+  const doc = win.document, st = win.tulisHanzi;
+  if (!st) throw new Error('aplikasi di iframe #' + id + ' tidak siap');
+  const chip = [...doc.querySelectorAll('#lesson-list .chip')].find(c => c.querySelector('.hzc').textContent === kata);
+  if (doc.querySelector('#screen-practice').hidden) {
+    chip.click();
+    await sleep(500);
+  } else {
+    doc.querySelector('#btn-clear').click();     // kanvas bersih untuk goresan berikutnya
+    await sleep(400);
+  }
+  const svg = doc.querySelector('#hw svg');
+  const size = Number(svg.getAttribute('width'));
+  const p = Math.round(size * 0.04), z = 1024;
+  const s = Math.min((size - 2 * p) / z, (size - 2 * p) / z);
+  const pos = { scale: s, xOffset: p + ((size - 2 * p) - s * z) / 2, yOffset: p + ((size - 2 * p) - s * z) / 2 + 124 * s, height: size };
+  const rect = svg.getBoundingClientRect();
+  const pts = st.strokes['我'].medians[0].map(q => ({
+    x: rect.left + q[0] * pos.scale + pos.xOffset,
+    y: rect.top + pos.height - pos.yOffset - q[1] * pos.scale
+  }));
+  const ev = (type, q) => new win.MouseEvent(type, { bubbles: true, cancelable: true, clientX: q.x, clientY: q.y });
+  svg.dispatchEvent(ev('mousedown', pts[0]));
+  pts.slice(1).forEach(q => svg.dispatchEvent(ev('mousemove', q)));
+  doc.dispatchEvent(ev('mouseup', pts[pts.length - 1]));
+  await sleep(1000);          // beri waktu animasi memudar/mengisi aksara selesai
+  return { ifr, win, doc, st, kanvas: st.writer, titik: doc.querySelectorAll('#p-dots i.on').length, size: st.size };
+}
+
+function hasil(X) {
+  const tinta = [...X.doc.querySelectorAll('#hw svg path')].filter(p => {
+    const s = X.win.getComputedStyle(p);
+    return parseFloat(s.opacity) > 0.5 && s.stroke === 'rgb(31, 41, 55)' && s.fill === 'none';
+  }).length;
+  return {
+    titik: X.doc.querySelectorAll('#p-dots i.on').length,
+    tinta: tinta,
+    dipasangUlang: X.st.writer !== X.kanvas,
+    ukuran: X.st.size
+  };
+}
+
+(async function () {
+  try {
+  const A = await goresanBenar('lama', '我们');      // versi lama
+  const B = await goresanBenar('baru', '我们');      // versi baru
+  catat('Kedua versi menerima 1 goresan benar, lalu diberi perlakuan yang sama.');
+  catat('Catatan kejujuran: jumlah gambar tinta pada SATU detik tertentu tidak bisa dipakai');
+  catat('sebagai bukti, karena animasi pustaka belum tentu selesai (terbukti berubah antar-jalan).');
+  catat('Bukti "tinta terlihat" diukur dari piksel potret layar: lihat scripts/hitung-tinta.py.');
+
+  async function situasi(judul, ubah) {
+    // pulihkan lebar iframe ke 380 dan tulis ulang goresan agar kedua versi setara
+    A.ifr.style.width = '380px'; B.ifr.style.width = '380px';
+    await sleep(700);
+    const a = await goresanBenar('lama', '我们');
+    const b = await goresanBenar('baru', '我们');
+    if (ubah) { await ubah(a, b); await sleep(1200); }
+    a.win.dispatchEvent(new a.win.Event('resize'));
+    b.win.dispatchEvent(new b.win.Event('resize'));
+    await sleep(1200);
+    const ra = hasil(a), rb = hasil(b);
+    catat('');
+    catat(judul);
+    catat('  versi lama: goresan tersisa=' + ra.titik + ' | tinta terlihat=' + ra.tinta + ' | kanvas dipasang ulang=' + ra.dipasangUlang);
+    catat('  versi baru: goresan tersisa=' + rb.titik + ' | tinta terlihat=' + rb.tinta + ' | kanvas dipasang ulang=' + rb.dipasangUlang);
+    return { ra: ra, rb: rb };
+  }
+
+  const s1 = await situasi('1) resize biasa (lebar layar tidak berubah) — mis. menggulir di HP', null);
+  const s2 = await situasi('2) lebar berubah SEDIKIT (12 px) — mis. scrollbar muncul', async (a, b) => {
+    a.ifr.style.width = '368px'; b.ifr.style.width = '368px';
+  });
+  const s3 = await situasi('3) lebar berubah BANYAK (80 px) — mis. HP diputar', async (a, b) => {
+    a.ifr.style.width = '300px'; b.ifr.style.width = '300px';
+  });
+
+  catat('');
+  const bug = s1.ra.titik === 0 && s2.ra.titik === 0;
+  const beres = s1.rb.titik === 1 && s2.rb.titik === 1;
+  const wajar = s3.rb.dipasangUlang === true && s3.rb.titik === 0;
+  catat(bug ? 'TERBUKTI  : versi lama menghapus sendiri goresan yang sudah ditulis pada SETIAP perubahan ukuran (termasuk 12 px)' : 'CATATAN   : bug versi lama tidak terproduksi');
+  catat(beres ? 'TERBUKTI  : versi baru mempertahankan goresan pada perubahan ukuran kecil (perbaikan berhasil)' : 'CATATAN   : versi baru masih kehilangan goresan');
+  catat(wajar ? 'WAJAR     : perubahan lebar besar (mis. HP diputar) tetap memasang ulang kanvas, dan aplikasi memberi tahu' : 'CATATAN   : perubahan besar tidak menangani ulang kanvas');
+  catat('');
+  catat('PERINGATAN: pada versi lama, kanvas dipasang ulang pada setiap perubahan ukuran. Itu bukan');
+  catat('satu-satunya sebab. Sebab lain ada di pengaturan kanvas (showCharacter) dan penjelasannya');
+  catat('ada di docs/RANCANGAN-SISTEM.md bagian 6 dan 7.');
+  } catch (e) {
+    catat('ERROR UJI: ' + (e && e.message ? e.message : e));
+  }
+  document.title = 'SELESAI';
+})();
+</script>
+</body></html>

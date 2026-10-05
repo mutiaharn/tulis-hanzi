@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="id"><head><meta charset="utf-8"><title>struktur kanvas</title>
+<style>html,body{margin:0;padding:0;font:11.5px monospace}#app{border:0;width:420px;height:600px}
+#d{position:fixed;left:430px;top:0;background:#fff;white-space:pre;overflow:auto;max-height:100vh}</style>
+</head>
+<body>
+<iframe id="app" src="../../app/index.html"></iframe>
+<pre id="d">…</pre>
+<script>
+const ifr = document.getElementById('app');
+const out = document.getElementById('d');
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const mode = new URLSearchParams(location.search).get('mode') || 'benar';
+
+function pohon(node, dalam, baris) {
+  const atr = ['id', 'class', 'opacity', 'transform', 'style'].filter(k => node.getAttribute && node.getAttribute(k))
+    .map(k => k + '=' + String(node.getAttribute(k)).slice(0, 42)).join(' ');
+  let extra = '';
+  if (node.tagName === 'path') {
+    const d = node.getAttribute('d') || '';
+    extra = ' [d=' + d.length + ' char, mulai "' + d.slice(0, 22) + '"]';
+  }
+  baris.push('  '.repeat(dalam) + node.tagName + (atr ? ' ' + atr : '') + extra);
+  [...(node.children || [])].forEach(c => pohon(c, dalam + 1, baris));
+  return baris;
+}
+
+(async function () {
+  const win = ifr.contentWindow;
+  let t = 0;
+  while (!(win.tulisHanzi && win.tulisHanzi.hsk1) && t++ < 100) await sleep(150);
+  const doc = win.document;
+  [...doc.querySelectorAll('#lesson-list .chip')].find(c => c.querySelector('.hzc').textContent === '我们').click();
+  await sleep(600);
+
+  const st = win.tulisHanzi;
+  const svg = doc.querySelector('#hw svg');
+  const size = Number(svg.getAttribute('width'));
+  const pad = Math.round(size * 0.04), z = 1024;
+  const s = Math.min((size - 2 * pad) / z, (size - 2 * pad) / z);
+  const pos = { scale: s, xOffset: pad + ((size - 2 * pad) - s * z) / 2, yOffset: pad + ((size - 2 * pad) - s * z) / 2 + 124 * s, height: size };
+  const rect = svg.getBoundingClientRect();
+  const kirim = garis => {
+    const ev = (type, x, y) => new win.MouseEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y });
+    const titik = garis.map(p => ({ x: rect.left + p[0] * pos.scale + pos.xOffset, y: rect.top + pos.height - pos.yOffset - p[1] * pos.scale }));
+    svg.dispatchEvent(ev('mousedown', titik[0].x, titik[0].y));
+    titik.slice(1).forEach(q => svg.dispatchEvent(ev('mousemove', q.x, q.y)));
+    doc.dispatchEvent(ev('mouseup', titik[titik.length - 1].x, titik[titik.length - 1].y));
+  };
+
+  if (mode === 'salah') kirim([[560, 980], [760, 980], [960, 980]]);
+  else kirim(st.strokes['我'].medians[0]);
+  await sleep(2000);
+
+  const baris = pohon(svg, 0, []);
+  // sertakan info opacity nyata (dihitung browser) untuk setiap path
+  const info = [...svg.querySelectorAll('path')].map((p, i) => {
+    const cs = win.getComputedStyle(p);
+    return 'path#' + i + ' opacity=' + Number(cs.opacity).toFixed(3) + ' stroke=' + cs.stroke + ' lebar=' + cs.strokeWidth;
+  });
+  out.textContent = 'mode=' + mode + '  (titik progres=' + doc.querySelectorAll('#p-dots i.on').length + ')\n\n' +
+    baris.join('\n') + '\n\n--- opacity tiap path (hitungan browser) ---\n' + info.join('\n');
+  document.title = 'SELESAI';
+})();
+</script>
+</body></html>

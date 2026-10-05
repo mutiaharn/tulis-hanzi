@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<title>Foto isian</title>
+<style>
+  html,body{margin:0;padding:0;background:#fff}
+  iframe{position:absolute;left:0;top:0;width:420px;height:820px;border:0}
+</style>
+</head>
+<body>
+<!-- Halaman potret: hanya memuat aplikasi pada posisi 0,0 supaya potret layar bisa dihitung
+     piksel demi piksel (lihat scripts/uji-isian.py). Mode diambil dari ?mode=… :
+       tengah   : goresan pertama ditulis sampai ~55%, jari BELUM dilepas (isian sebagian)
+       penuh    : goresan pertama ditulis sampai 100%, jari BELUM dilepas (masih berkoridor)
+       diterima : sama seperti penuh, lalu jari dilepas (goresan diterima, tanpa koridor)
+       tiga     : tiga goresan pertama ditulis sampai diterima semua
+       contoh   : tanpa menulis; contoh arah goresan otomatis diputar di dalam kanvas
+       kosong   : tanpa menulis (pembanding: kanvas hanya berisi template) -->
+<iframe id="app" src="../../app/index.html"></iframe>
+<pre id="info" style="position:fixed;left:-9999px;top:-9999px"></pre>
+<script>
+const mode = (new URLSearchParams(location.search)).get('mode') || 'kosong';
+const tunggu = (ms) => new Promise(r => setTimeout(r, ms));
+
+(async function () {
+  const fr = document.getElementById('app');
+  await new Promise(r => fr.addEventListener('load', r));
+  const w = fr.contentWindow, d = fr.contentDocument;
+  for (let i = 0; i < 80 && !(w.tulisHanzi && w.tulisHanzi.hsk1); i++) await tunggu(150);
+  const st = w.tulisHanzi;
+
+  const chip = [...d.querySelectorAll('#lesson-list .chip')].find(c => c.title.indexOf('我们') === 0);
+  chip.click();
+  for (let i = 0; i < 80 && !st.lapisan; i++) await tunggu(100);   // lapisan dipasang asinkron
+  await tunggu(250);
+  const L = st.lapisan;
+
+  const peta = (g) => [L.svg.getBoundingClientRect().left + L.ubah.tx + L.ubah.sx * g[0],
+                       L.svg.getBoundingClientRect().top + L.ubah.ty + L.ubah.sy * g[1]];
+  const sel = d.querySelector('#hw svg');
+  const tembak = (jenis, titik) => {
+    if (!titik) return;
+    const [x, y] = peta(titik);
+    sel.dispatchEvent(new MouseEvent(jenis, { clientX: x, clientY: y, bubbles: true }));
+  };
+  const median = (i) => {
+    const med = st.strokes['我'].medians[i];
+    const k = [0];
+    for (let j = 1; j < med.length; j++) k.push(k[j-1] + Math.hypot(med[j][0]-med[j-1][0], med[j][1]-med[j-1][1]));
+    const total = k[k.length-1];
+    return { med, k, total,
+      di: (t) => {
+        for (let j = 1; j < med.length; j++) {
+          if (k[j] >= t) {
+            const f = (t - k[j-1]) / (k[j] - k[j-1] || 1);
+            return [med[j-1][0] + f*(med[j][0]-med[j-1][0]), med[j-1][1] + f*(med[j][1]-med[j-1][1])];
+          }
+        }
+        return med[med.length-1];
+      } };
+  };
+
+  if (mode === 'contoh') {
+    d.querySelector('#btn-demo').click();
+    await tunggu(1500);
+  } else if (mode !== 'kosong') {
+    const g = median(0);
+    tembak('mousedown', g.med[0]);
+    await tunggu(40);
+    const fraksi = mode === 'tengah' ? [0.2, 0.4, 0.55] : [0.25, 0.5, 0.75, 0.95, 1];
+    for (const f of fraksi) { tembak('mousemove', g.di(g.total * f)); await tunggu(30); }
+    if (mode !== 'tengah' && mode !== 'penuh') { tembak('mouseup', g.di(g.total)); await tunggu(400); }
+    if (mode === 'tiga') {
+      for (const i of [1, 2]) {
+        const h = median(i);
+        tembak('mousedown', h.med[0]);
+        await tunggu(40);
+        for (const f of [0.3, 0.6, 0.9, 1]) { tembak('mousemove', h.di(h.total * f)); await tunggu(30); }
+        tembak('mouseup', h.di(h.total));
+        await tunggu(400);
+      }
+    }
+  }
+  document.title = 'siap';
+  const r = L.svg.getBoundingClientRect();
+  const info = document.getElementById('info');
+  info.textContent = JSON.stringify({ x: r.left, y: r.top, w: r.width, h: r.height,
+                                      contoh: (L.contoh.getAttribute('d') || '').length,
+                                      dashoffset: L.contoh.getAttribute('stroke-dashoffset'),
+                                      jalan: !!(st.contoh && st.contoh.jalan),
+                                      awalan: (L.contoh.getAttribute('d') || '').slice(0, 42),
+                                      goresan: st.strokeIdx });
+})();
+</script>
+</body>
+</html>

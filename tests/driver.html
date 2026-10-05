@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="id"><head><meta charset="utf-8"><title>tampilan aplikasi</title>
+<style>html,body{margin:0;padding:0;overflow:hidden}#app{border:0;display:block;width:100vw;height:100vh}</style>
+</head>
+<body>
+<iframe id="app" src="../app/index.html"></iframe>
+<script>
+/* Pembungkus untuk memotret layar aplikasi dengan Chrome headless. Parameter:
+     ?w=我们       -> langsung membuka kartu latihan kata tersebut
+     ?n=4        -> tulis 4 goresan pertama yang BENAR (supaya tinta terlihat di potret)
+     ?separuh=1  -> goresan pertama ditulis sampai ~55% lalu BERHENTI (isian setengah jalan)
+     ?contoh=1   -> putar contoh arah goresan di kanvas (tombol "Lihat contoh") */
+const q = new URLSearchParams(location.search);
+const w = q.get('w');
+const n = Number(q.get('n') || 0);
+const separuh = q.get('separuh') === '1';
+const contoh = q.get('contoh') === '1';
+const ifr = document.getElementById('app');
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+(async function () {
+  if (!w) return;
+  const win = ifr.contentWindow;
+  let t = 0;
+  while (!(win.tulisHanzi && win.tulisHanzi.hsk1) && t++ < 100) await sleep(150);
+  const doc = win.document;
+  const chip = [...doc.querySelectorAll('#lesson-list .chip')].find(c => c.querySelector('.hzc').textContent === w);
+  if (chip) chip.click();
+  await sleep(700);
+  const st = win.tulisHanzi;
+  if (!st) return;
+
+  const svg = doc.querySelector('#hw svg:not(.lapisan-tinta)');
+  const size = Number(svg.getAttribute('width'));
+  const pad = Math.round(size * 0.04), z = 1024;
+  const s = Math.min((size - 2 * pad) / z, (size - 2 * pad) / z);
+  const pos = { scale: s, xOffset: pad + ((size - 2 * pad) - s * z) / 2, yOffset: pad + ((size - 2 * pad) - s * z) / 2 + 124 * s, height: size };
+  const rect = svg.getBoundingClientRect();
+  const ev = (type, x, y) => new win.MouseEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y });
+  const piksel = p => ({ x: rect.left + p[0] * pos.scale + pos.xOffset,
+                         y: rect.top + pos.height - pos.yOffset - p[1] * pos.scale });
+  const kirim = (garis, lepas) => {
+    const titik = garis.map(piksel);
+    svg.dispatchEvent(ev('mousedown', titik[0].x, titik[0].y));
+    titik.slice(1).forEach(k => svg.dispatchEvent(ev('mousemove', k.x, k.y)));
+    if (lepas !== false) doc.dispatchEvent(ev('mouseup', titik[titik.length - 1].x, titik[titik.length - 1].y));
+  };
+
+  const medians = st.strokes[st.chars[st.ci]].medians;
+  if (separuh) {
+    const med = medians[0];
+    const k = [0];
+    for (let i = 1; i < med.length; i++) k.push(k[i - 1] + Math.hypot(med[i][0] - med[i - 1][0], med[i][1] - med[i - 1][1]));
+    const total = k[k.length - 1];
+    const di = (t2) => {
+      for (let i = 1; i < med.length; i++) {
+        if (k[i] >= t2) {
+          const f = (t2 - k[i - 1]) / (k[i] - k[i - 1] || 1);
+          return [med[i - 1][0] + f * (med[i][0] - med[i - 1][0]), med[i - 1][1] + f * (med[i][1] - med[i - 1][1])];
+        }
+      }
+      return med[med.length - 1];
+    };
+    kirim([med[0], di(total * 0.25), di(total * 0.45), di(total * 0.55)], false);
+    await sleep(400);
+  } else {
+    for (let i = 0; i < Math.min(n, medians.length); i++) { kirim(medians[i]); await sleep(700); }
+    await sleep(1200);
+  }
+  if (contoh) { doc.querySelector('#btn-demo').click(); await sleep(1200); }
+  document.title = 'SIAP';
+})();
+</script>
+</body></html>

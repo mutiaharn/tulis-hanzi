@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="id"><head><meta charset="utf-8"><title>probe lapisan</title></head>
+<body>
+<iframe id="app" src="../../app/index.html" width="400" height="900"></iframe>
+<pre id="out">…</pre>
+<script>
+const tunggu = (ms) => new Promise(r => setTimeout(r, ms));
+const out0 = [];
+(async function () {
+  const fr = document.getElementById('app');
+  await new Promise(r => fr.addEventListener('load', r));
+  const w = fr.contentWindow, d = fr.contentDocument;
+  w.addEventListener('error', (e) => { document.title = 'galat'; out0.push('GALAT DI APLIKASI: ' + e.message + ' (baris ' + e.lineno + ')'); });
+  for (let i = 0; i < 60 && !(w.tulisHanzi && w.tulisHanzi.hsk1); i++) await tunggu(200);
+  const out = out0;
+  try {
+    const st = w.tulisHanzi;
+    const chip = [...d.querySelectorAll('#lesson-list .chip')].find(c => c.title.indexOf('我们') === 0);
+    chip.click();
+    await tunggu(800);
+    out.push('lapisan = ' + (st.lapisan ? 'ada' : 'NULL'));
+    const svgs = d.querySelectorAll('#hw svg');
+    out.push('#hw svg jumlah = ' + svgs.length);
+    svgs.forEach(function (s, i) {
+      out.push('svg[' + i + '] class=' + s.getAttribute('class') + ' width=' + s.getAttribute('width') + ' height=' + s.getAttribute('height') + ' viewBox=' + s.getAttribute('viewBox'));
+    });
+    const gs = d.querySelectorAll('#hw svg g');
+    out.push('g jumlah = ' + gs.length);
+    gs.forEach(function (g, i) { if (i < 6) out.push('g[' + i + '] transform=' + JSON.stringify(g.getAttribute('transform'))); });
+    const lg = d.querySelector('#hw svg g[transform]');
+    out.push('g[transform] pertama: ' + (lg ? JSON.stringify(lg.getAttribute('transform')) : 'TIDAK ADA'));
+    out.push('rect #hw = ' + JSON.stringify(d.querySelector('#hw').getBoundingClientRect().toJSON()));
+    out.push('strokeIdx=' + st.strokeIdx + ' total=' + st.total + ' writer=' + !!st.writer);
+    out.push('galat konsol terakhir: (lihat di bawah)');
+  } catch (e) { out.push('ERROR ' + e.message + '\n' + e.stack); }
+  document.getElementById('out').textContent = out.join('\n');
+  document.title = 'selesai';
+})();
+</script>
+</body></html>

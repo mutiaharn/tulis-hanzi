@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="id"><head><meta charset="utf-8"><title>buka versi satu berkas</title>
+<style>html,body{margin:0;padding:0;overflow:hidden}#app{border:0;display:block;width:100vw;height:100vh}</style>
+</head>
+<body>
+<!-- Pembungkus untuk memotret versi SATU BERKAS (dist/tulis-hanzi-satu-file.html) lewat file://.
+     Perlu Chrome dengan --allow-file-access-from-files agar ibu bisa membaca isi iframe. -->
+<iframe id="app" src="../dist/tulis-hanzi-satu-file.html"></iframe>
+<script>
+const w = new URLSearchParams(location.search).get('w');
+const ifr = document.getElementById('app');
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+(async function () {
+  if (!w) return;
+  const win = ifr.contentWindow;
+  let t = 0;
+  while (!(win.tulisHanzi && win.tulisHanzi.hsk1) && t++ < 120) await sleep(150);
+  const doc = win.document;      // SETELAH iframe selesai memuat
+  const st = win.tulisHanzi;
+  if (!st) return;
+  const chip = [...doc.querySelectorAll('#lesson-list .chip')].find(c => c.querySelector('.hzc').textContent === w);
+  if (chip) chip.click();
+  await sleep(500);
+  const svg = doc.querySelector('#hw svg');
+  if (!svg) return;
+  const size = Number(svg.getAttribute('width'));
+  const pad = Math.round(size * 0.04), z = 1024;
+  const s = Math.min((size - 2 * pad) / z, (size - 2 * pad) / z);
+  const pos = { scale: s, xOffset: pad + ((size - 2 * pad) - s * z) / 2, yOffset: pad + ((size - 2 * pad) - s * z) / 2 + 124 * s, height: size };
+  const rect = svg.getBoundingClientRect();
+  const pts = st.strokes['我'].medians[0].map(p => ({
+    x: rect.left + p[0] * pos.scale + pos.xOffset,
+    y: rect.top + pos.height - pos.yOffset - p[1] * pos.scale
+  }));
+  const ev = (type, p) => new win.MouseEvent(type, { bubbles: true, cancelable: true, clientX: p.x, clientY: p.y });
+  const kirim = (daftar) => {
+    svg.dispatchEvent(ev('mousedown', daftar[0]));
+    daftar.slice(1).forEach(p => svg.dispatchEvent(ev('mousemove', p)));
+    doc.dispatchEvent(ev('mouseup', daftar[daftar.length - 1]));
+  };
+  const ke = p => ({ x: rect.left + p[0] * pos.scale + pos.xOffset, y: rect.top + pos.height - pos.yOffset - p[1] * pos.scale });
+  kirim(pts);
+  for (const med of st.strokes['我'].medians.slice(1)) {   // goresan ke-2 sampai ke-7
+    kirim(med.map(ke));
+    await sleep(600);
+  }
+  await sleep(1500);   // beri waktu animasi pengisian selesai
+  document.title = 'SIAP';
+})();
+</script>
+</body></html>
