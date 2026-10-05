@@ -1,0 +1,236 @@
+"""Menjalankan uji otomatis Tulis Hanzi dan menyimpan buktinya.
+
+Syarat: dua server lokal sedang jalan (lihat README):
+    python -m http.server 8777 --directory app
+    python -m http.server 8778 --directory .
+Jalankan: python scripts/uji.py
+Hasil ditulis ke: docs/hasil-uji.txt
+"""
+import html
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+import time
+import urllib.request
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+URL = 'http://127.0.0.1:8778/tests/selftest.html'
+HASIL = os.path.join(ROOT, 'docs', 'hasil-uji.txt')
+CHROME = [
+    r'C:\Program Files\Google\Chrome\Application\chrome.exe',
+    r'C:\Program Files (x86)\Google\Chrome\Application\chrome.exe',
+    '/usr/bin/google-chrome', '/usr/bin/chromium', '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+]
+
+CATATAN = """
+====================================================================
+CATATAN: bagian berikut TIDAK dihasilkan oleh skrip ini. Ada yang dijalankan
+manual (bukti apa adanya), ada juga yang berupa pembacaan kode pustaka — keduanya
+ditandai dengan jelas, supaya tidak ada klaim yang dilebihkan.
+
+CARA KERJA BARU: CONTOH DI DALAM KANVAS + ISIAN MENGIKUTI JARI
+(dua permintaan yang jadi keluaran akhir; lihat juga docs/RANCANGAN-SISTEM.md)
+  1. Jalur jari mentah TIDAK digambar lagi. Pustaka tetap mencatat jalur itu untuk
+     menilai goresan (benar/salah), tetapi warnanya dibuat transparan (drawingColor),
+     jadi tidak ada "coretan mentah" yang terlihat di kanvas. Diuji:
+     "tidak ada coretan mentah (jalur jari) yang digambar" LULUS.
+  2. Tinta yang terlihat adalah lapisan MILIK APLIKASI SENDIRI (elemen <svg>
+     berkelas .lapisan-tinta di atas kanvas; pointer-events:none supaya sentuhan
+     tetap sampai ke pustaka). Untuk setiap goresan, app/data/strokes.json memuat
+     BENTUK asli goresan (jalur tertutup) dan garis tengahnya (median) yang memang
+     arah goresan itu. Aplikasi menampilkan bentuk asli itu, tetapi disaring oleh
+     "koridor": pita yang dibangun dari posisi jari sepanjang garis tengah. Jadi
+     goresan aksara TERBUKA SEDIKIT DEMI SEDIKIT mengikuti arah gerak jari — bukan
+     menggambar acak — dan begitu goresan dinilai BENAR di akhir, seluruh bentuk
+     goresan itu dibekukan sehingga tetap terlihat sampai tombol Hapus ditekan.
+  3. Contoh arah goresan diputar DI DALAM kanvas yang sama (kotak contoh terpisah
+     sudah dihapus): jalur merah pucat di sepanjang garis tengah goresan berikutnya,
+     dianimasikan dengan stroke-dashoffset, dan langsung menyingkir begitu pengguna
+     mulai menulis. Karena aplikasi menggambar contohnya sendiri, penilaian goresan
+     TIDAK ikut dibatalkan (dulu animateStroke memanggil cancelQuiz).
+
+BUKTI ISIAN DAN CONTOH (diukur dari potret layar, bukan dari kode)
+Perintah: python scripts/uji-isian.py   (Chrome headless + scripts/png.py)
+  keadaan                       piksel gelap   piksel contoh
+  kosong (contoh berjalan)          38.590          3.824
+  tengah (baru 55% goresan)         39.465              0
+  penuh  (seluruh goresan dibuka)   39.674              0
+  diterima (setelah divalidasi)     39.708              0
+  tiga goresan                      45.163              0
+  1) tinta bertambah bertahap: 38.590 -> 39.465 -> 39.708 (tidak langsung penuh).
+     Pada saat jari baru menempuh ~55% panjang goresan, 78% LUAS goresan terlihat —
+     bertahap, bukan mengisi seluruh aksara sekaligus.
+  2) koridor tidak memotong aksara: bentuk "penuh" dibanding "diterima" hanya
+     berbeda 34 piksel (3,0% dari tinta) -> tidak ada bagian goresan yang diam-diam
+     disembunyikan oleh koridor.
+  3) tiga goresan = 45.163 > 39.708 -> tinta bertambah setiap goresan.
+  4) contoh digambar DI DALAM kanvas: 3.824 piksel merah pucat, sebarannya
+     (x 88..206, y 387..461) — yaitu di dalam kotak kanvas (33..372, 312..651) —
+     dan jalur contohnya benar-benar ada di dalam elemen kanvas (#hw).
+  5) contoh menyingkir saat pengguna mulai menulis: 0 piksel contoh.
+  Potret: docs/tampilan-latihan.png (contoh di dalam kanvas),
+          docs/tampilan-isian.png (isian baru setengah jalan),
+          docs/tampilan-selesai.png (aksara penuh).
+
+BUKTI BENTUK DAN KEHALUSAN (bagian dari 56 uji otomatis di atas)
+  - "yang terisi adalah BENTUK ASLI goresan aksara, bukan coretan jari" LULUS:
+    jalur (d) elemen isian sama persis dengan jalur bentuk goresan di data.
+  - "isian tumbuh mengikuti posisi kursor" LULUS: setelah jari menempuh ~50%
+    garis tengah, panjang isian 0,3..0,7 dari panjang goresan (bertahap).
+  - "isian tidak mundur saat jari mundur (tidak berkedip)" LULUS: panjang isian
+    tidak pernah menyusut -> tidak ada kedipan saat jari bergerak bolak-balik.
+  - "contoh arah benar-benar berjalan (banyak langkah)" LULUS: perubahan atribut
+     animasi dihitung dengan MutationObserver (bukan dua kali foto sesaat, yang
+     tidak sah di lingkungan uji karena waktu uji berjalan sangat cepat).
+  - "contoh di kanvas TIDAK membatalkan penilaian di kanvas itu" LULUS.
+  - "tinta pengguna tidak terhapus oleh contoh" LULUS.
+
+UJI LUAR JARINGAN (offline) — perintah: python scripts/uji-offline.py (dijalankan, hasil di bawah)
+Cara uji ini sengaja dibuat lebih ketat daripada sekadar "matikan server": dengan profil
+Chrome biasa, permintaan halaman masih bisa dilayani CACHE HTTP milik Chrome, sehingga
+"aplikasi tetap terbuka" belum tentu bukti service worker. Karena itu uji ini memakai
+--disk-cache-size=1 (cache HTTP dimatikan) dan memeriksa isi simpanan service worker di disk.
+Masalah kedua ditemukan kemudian: pemasangan service worker dikerjakan PROSES BROWSER,
+bukan halaman, jadi tidak ikut dipercepat --virtual-time-budget — Chrome bisa keluar
+sebelum simpanan selesai ditulis, sehingga hasil ujinya dulu bergantung keberuntungan
+(pernah lulus, pernah kosong, padahal aplikasinya tidak berubah). Sekarang uji ini
+menjalankan server kecil sendiri yang punya alamat sengaja lambat (/lambat?s=2.5):
+selama permintaan itu belum dijawab, jam virtual Chrome menunggu, sehingga browser
+tetap hidup dan pemasangan service worker mendapat waktu NYATA. Hasilnya:
+  0) server yang sedang jalan di port 8777 dihentikan dulu (PID 16364)
+  1) aplikasi dibuka di dalam bingkai pada halaman pemantau:
+       putaran 1: pendaftaran=1 state=activated cache=1 berkas=11
+                  [tulis-hanzi-b6ccc66620=11]  -> seluruh 11 berkas tersimpan
+  2) isi simpanan service worker di disk: 5 berkas >20 KB
+       351.405 B (data goresan)  93.648 B  37.439 B  33.679 B  30.652 B
+  3) server dimatikan (port 8777 terbukti kosong)
+  4) aplikasi dibuka lagi TANPA server dan TANPA cache HTTP -> 150 kata terbaca
+  5) alamat yang tidak ada (/alamat-yang-tidak-ada) -> halaman aplikasi dikembalikan,
+     tanpa halaman error Chrome
+  6) server aplikasi dinyalakan lagi
+  => hanya service worker yang bisa melakukannya: PEMAKAIAN OFFLINE TERBUKTI.
+  Catatan: penanganan di app/sw.js hanya memakai index.html simpanan untuk permintaan
+  HALAMAN (navigasi). Sebelum diperbaiki, berkas JS yang gagal diambil juga menerima
+  index.html, sehingga aplikasi rusak saat alamatnya salah.
+
+UJI VERSI SATU BERKAS (dist/tulis-hanzi-satu-file.html) — dijalankan manual
+Dibuka lewat file:// (tanpa server sama sekali):
+  - 150 tombol kata tampil
+  - 0 rujukan ke berkas luar (http) dan 0 rujukan ke berkas app/ yang terpisah
+  => seluruh aplikasi + data benar-benar berada di dalam satu berkas.
+
+BUKTI TINGKAT PIKSEl VERSI LAMA (sebelum mekanisme isian; disimpan sebagai riwayat)
+Cara: potret layar aplikasi diambil dengan Chrome headless, lalu dihitung
+scripts/hitung-tinta.py (membaca PNG sendiri, tanpa pustaka luar).
+  - kanvas tanpa goresan          : 0 piksel gelap   (0,00% dari 114.240 piksel)
+  - kanvas dengan 4 goresan benar : 2.360 piksel gelap (2,07%)
+  - kanvas aksara 我 lengkap (7)  : 11.818 piksel gelap (10,34%)
+  Angka-angka ini dari versi LAMA (tinta digambar langsung oleh jalur jari).
+  Untuk versi sekarang, angkanya ada di bagian "BUKTI ISIAN DAN CONTOH" di atas
+  (perintah: python scripts/uji-isian.py).
+
+BUKTI BUG: "GORESAN HILANG SENDIRI" — dua sebab, dengan bukti berbeda
+Sebab 1 (terbukti dengan pengukuran, halaman tests/bukti-bug-resize.html;
+salinan versi lama dibuat oleh scripts/buat-bukti-bug.py):
+  Kanvas DIPASANG ULANG pada setiap event resize.
+    - perubahan lebar 12 px  : versi lama goresan tersisa=0, kanvas dipasang ulang=true
+                               versi baru goresan tersisa=1, kanvas dipasang ulang=false
+    - resize biasa (lebar tetap, mis. menggulir di HP):
+                               versi lama tersisa=0 dipasang ulang=true
+                               versi baru tersisa=1 dipasang ulang=false
+    - perubahan lebar 80 px (HP diputar): kedua versi memasang ulang (memang disengaja)
+  Sebab di HP: menggulir menutup address bar -> resize -> kanvas dihapus.
+  Perbaikan: kanvas hanya dipasang ulang bila lebarnya berubah lebih dari 16 px,
+  dan tidak ada lagi perpindahan aksara otomatis setelah aksara selesai.
+
+Sebab 2 (dari PEMBACAAN KODE pustaka app/vendor/hanzi-writer.min.js, bukan dari potret):
+  Fungsi endUserStroke() memudarkan goresan yang baru ditulis pengguna
+  (userStrokes.<id>.opacity -> 0, durasi drawingFadeDuration bawaan 300 ms) dan
+  goresan aksara aslinya ditampilkan sebagai gantinya dengan warna strokeColor.
+  Versi awal aplikasi memakai showCharacter: true, artinya aksara aslinya SUDAH
+  tampil sejak awal (warna pucat). Karena itu goresan pengguna dipudarkan tanpa
+  ada yang menggantikannya -> tulisan yang sudah BENAR tampak hilang sendiri.
+  Perbaikan: gambar pustaka sekarang dimatikan sama sekali (showCharacter: false +
+  drawingColor transparan) dan tinta yang terlihat digambar oleh lapisan aplikasi
+  sendiri, jadi pemudaran itu tidak lagi berpengaruh pada apa yang terlihat.
+  Diuji lagi setelah perubahan: "setelah menunggu 2,2 detik, tinta MASIH TERLIHAT"
+  dan "tombol Hapus benar-benar menghapus tinta (satu-satunya cara tinta hilang)" LULUS.
+  CATATAN KEJUJURAN: jumlah gambar tinta pada satu detik tertentu TIDAK dijadikan
+  bukti di sini, karena animasi pustaka belum tentu selesai saat itu dan angkanya
+  terbukti berubah antar-jalan. Karena itu bukti "tinta terlihat" memakai hitungan
+  piksel di atas.
+
+SEBAB 3 yang ditemukan sekaligus (terukur, lalu diperbaiki):
+  Pustaka membiarkan gambar goresan yang DITOLAK tetap di kanvas (terukur: masih
+  terlihat 2 detik kemudian, lebar 29 px, opacity 1,00). Karena gambar pustaka
+  sekarang dimatikan sama sekali, yang perlu diurus hanya isian milik aplikasi:
+  isian yang sedang berjalan dibuang saat goresan ditolak. Diuji: "goresan salah
+  tidak meninggalkan tinta di kanvas" LULUS (tinta terlihat=0).
+
+CATATAN ALAT UJI: Chrome headless TIDAK mengirim event resize ke iframe yang lebar
+CSS-nya diubah induknya (diukur: tata letak berubah 351 -> 271 px, tetapi jumlah event
+resize yang sampai = 0). Karena itu uji perubahan ukuran mengirim event resize secara
+manual, sama seperti yang dilakukan browser pada layar sungguhan saat HP diputar.
+Catatan kedua: waktu di lingkungan uji berjalan sangat cepat, sehingga animasi bisa
+sudah SELESAI lebih dulu daripada dua kali pengambilan nilai. Karena itu uji animasi
+memakai MutationObserver (menghitung perubahan atribut), bukan dua kali sampel.
+
+ISU UKURAN YANG BELUM DIUJI DARI SINI: penerbitan ke GitHub Pages (butuh login akun
+GitHub) dan pemakaian di HP/iPhone sebenarnya. Keduanya dicatat sebagai belum
+terverifikasi, bukan sebagai selesai.
+"""
+
+
+def chrome_bin():
+    for c in CHROME:
+        if os.path.exists(c):
+            return c
+    sys.exit('Chrome tidak ditemukan. Ubah daftar CHROME di scripts/uji.py.')
+
+
+def pastikan_server():
+    for url in ['http://127.0.0.1:8777/', 'http://127.0.0.1:8778/tests/selftest.html']:
+        try:
+            urllib.request.urlopen(url, timeout=10).read(100)
+        except Exception as e:
+            sys.exit('Server belum jalan (%s): %s\nJalankan dulu:\n'
+                     '  python -m http.server 8777 --directory app\n'
+                     '  python -m http.server 8778 --directory .' % (url, e))
+
+
+def jalankan():
+    profil = os.path.join(tempfile.gettempdir(), 'chrome-uji-tulis-hanzi')
+    shutil.rmtree(profil, ignore_errors=True)
+    cmd = [chrome_bin(), '--headless=new', '--disable-gpu', '--no-first-run',
+           '--user-data-dir=' + profil, '--window-size=1000,900',
+           '--virtual-time-budget=120000', '--dump-dom', URL]
+    out = subprocess.run(cmd, capture_output=True, timeout=300).stdout.decode('utf-8', 'replace')
+    m = re.search(r'<pre id="out">(.*?)</pre>', out, re.S)
+    if not m:
+        sys.exit('Hasil uji tidak terbaca dari keluaran Chrome (panjang=%d).' % len(out))
+    return html.unescape(m.group(1)).replace('\r', '')
+
+
+def main():
+    pastikan_server()
+    hasil = jalankan()
+    lulus = re.search(r'RINGKASAN: (\d+)/(\d+) lulus', hasil)
+    kepala = ('Hasil uji otomatis Tulis Hanzi\n'
+              'Dijalankan: %s\n'
+              'Perintah: python scripts/uji.py  (Chrome headless + --dump-dom)\n'
+              'Uji menjalankan aplikasi asli di dalam iframe, lalu menekan kanvas memakai\n'
+              'koordinat yang diambil dari data goresan — jadi validasi goresan sungguhan.\n'
+              % time.strftime('%d %B %Y, %H:%M')) + '-' * 78 + '\n'
+    with open(HASIL, 'w', encoding='utf-8') as f:
+        f.write(kepala + hasil + '\n' + CATATAN)
+    print(hasil)
+    print('-> tersimpan di docs/hasil-uji.txt')
+    if lulus and lulus.group(1) != lulus.group(2):
+        sys.exit(1)          # supaya gagal uji kelihatan sebagai kegagalan perintah
+
+
+if __name__ == '__main__':
+    main()
